@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 '''
 
-from math import log
+from math import cos, log, radians, sin
+import warnings
 
 __all__ = ['Nu_vertical_plate_Churchill',
            'Nu_free_vertical_plate',
@@ -48,7 +49,28 @@ __all__ = ['Nu_vertical_plate_Churchill',
            'Nu_horizontal_cylinder_Morgan',
            'Nu_horizontal_cylinder',
            'Nu_horizontal_cylinder_methods',
-           'Nu_coil_Xin_Ebadian']
+           'Nu_coil_Xin_Ebadian',
+           'Nu_vertical_plate_laminar_Cengel',
+           'Nu_vertical_plate_turbulent_Cengel',
+           'Nu_vertical_plate_Cengel',
+           'Nu_inclined_plate_Cengel',
+           'Nu_horizontal_plate_Cengel',
+           'is_vertical_cylinder_plate_like',
+           'Nu_vertical_plate_isoflux_Cengel',
+           'Ra_vertical_channel',
+           'Nu_vertical_channel_isothermal_Bar_Cohen',
+           'optimum_fin_spacing_isothermal',
+           'Nu_optimum_fin_spacing',
+           'Q_finned_surface_natural',
+           'Ra_star_vertical_channel',
+           'Nu_vertical_channel_isoflux_Bar_Cohen',
+           'optimum_spacing_isoflux',
+           'Q_PCBs_natural',
+           'Nu_mixed_convection',
+           'mixed_convection_regime',
+           'h_air_natural_vertical_plate',
+           'h_air_natural_horizontal_plate',
+           'h_air_natural_horizontal_cylinder']
 
 
 def Nu_vertical_plate_Churchill(Pr, Gr):
@@ -1671,3 +1693,823 @@ def Nu_coil_Xin_Ebadian(Pr, Gr, horizontal=False):
         return 0.318*Ra**0.293
     else:
         return 0.290*Ra**0.293
+
+
+def Nu_vertical_plate_laminar_Cengel(Ra):
+    r'''Calculates the average Nusselt number for laminar natural convection
+    over a vertical flat plate with uniform surface temperature, according to
+    Eq. 9-19 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 0.59 Ra_L^{1/4} \quad (10^4 \le Ra_L \le 10^9)
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on plate height L [-]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number with respect to plate height, [-]
+
+    Notes
+    -----
+    Valid for laminar flow in the range :math:`10^4 \le Ra_L \le 10^9`.
+    All fluid properties should be evaluated at the film temperature
+    :math:`T_f = (T_s + T_\infty)/2`.
+
+    Examples
+    --------
+    Example 9-2 from [1]_:
+    >>> Nu_vertical_plate_laminar_Cengel(7.649e8) # doctest: +ELLIPSIS
+    98.11...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-19, p. 542, Table 9-1.
+    '''
+    if Ra < 1e4 or Ra > 1e9:
+        warnings.warn("Rayleigh number Ra={:.3e} is outside recommended range 10^4 <= Ra <= 10^9 for laminar vertical plate correlation (Eq. 9-19).".format(Ra), RuntimeWarning)
+    return 0.59 * Ra**0.25
+
+
+def Nu_vertical_plate_turbulent_Cengel(Ra):
+    r'''Calculates the average Nusselt number for turbulent natural convection
+    over a vertical flat plate with uniform surface temperature, according to
+    Eq. 9-20 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 0.10 Ra_L^{1/3} \quad (10^{10} \le Ra_L \le 10^{13})
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on plate height L [-]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number with respect to plate height, [-]
+
+    Notes
+    -----
+    Valid for turbulent flow in the range :math:`10^{10} \le Ra_L \le 10^{13}`.
+    All fluid properties should be evaluated at the film temperature
+    :math:`T_f = (T_s + T_\infty)/2`.
+
+    Examples
+    --------
+    >>> Nu_vertical_plate_turbulent_Cengel(1e11) # doctest: +ELLIPSIS
+    464.158...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-20, p. 542, Table 9-1.
+    '''
+    if Ra < 1e10 or Ra > 1e13:
+        warnings.warn("Rayleigh number Ra={:.3e} is outside recommended range 10^10 <= Ra <= 10^13 for turbulent vertical plate correlation (Eq. 9-20).".format(Ra), RuntimeWarning)
+    return 0.10 * Ra**(1.0/3.0)
+
+
+def Nu_vertical_plate_Cengel(Pr, Gr, method='Churchill'):
+    r'''Calculates the average Nusselt number for natural convection over an
+    isothermal vertical flat plate according to Çengel & Ghajar (5th Ed) [1]_.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Gr : float
+        Grashof number based on plate height L [-]
+    method : str, optional
+        Correlation method to use:
+        - 'Churchill': Churchill & Chu (Eq. 9-21), comprehensive relation for all Ra.
+        - 'simple': Simple empirical power laws (Eq. 9-19 for laminar, Eq. 9-20 for turbulent).
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number with respect to plate height, [-]
+
+    Examples
+    --------
+    From Example 9-2 in [1]_:
+    >>> Nu_vertical_plate_Cengel(0.7202, 1.062066e9, method='Churchill') # doctest: +ELLIPSIS
+    113.3...
+    >>> Nu_vertical_plate_Cengel(0.7202, 1.062066e9, method='simple') # doctest: +ELLIPSIS
+    98.11...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Table 9-1, p. 542.
+    '''
+    Ra = Pr * Gr
+    m = method.lower()
+    if m in ('churchill', 'complex'):
+        return Nu_vertical_plate_Churchill(Pr, Gr)
+    elif m == 'simple':
+        if Ra < 1e9:
+            return Nu_vertical_plate_laminar_Cengel(Ra)
+        else:
+            return Nu_vertical_plate_turbulent_Cengel(Ra)
+    else:
+        raise ValueError("Method '{}' not recognized. Use 'Churchill' or 'simple'.".format(method))
+
+
+def Nu_inclined_plate_Cengel(Pr, Gr, theta=0.0, hot_surface_facing='up', is_hot_plate=True, method='Churchill'):
+    r'''Calculates the average Nusselt number for natural convection over an
+    inclined flat plate according to Çengel & Ghajar (5th Ed) [1]_.
+
+    When the boundary layer remains intact (the lower surface of a hot plate
+    or the upper surface of a cold plate), the Nusselt number is determined
+    from the vertical plate relations by replacing gravitational acceleration
+    `g` with `g*cos(theta)` for :math:`0 \le \theta \le 60^\circ`, where `theta`
+    is the angle with the vertical.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Gr : float
+        Grashof number with standard gravity `g` [-]
+    theta : float, optional
+        Angle of inclination with the vertical, in degrees [deg] (0 <= theta <= 60)
+    hot_surface_facing : str, optional
+        'up' or 'down', orientation of the hotter surface [-]
+    is_hot_plate : bool, optional
+        True if the plate is hotter than the ambient fluid, False if colder [-]
+    method : str, optional
+        'Churchill' or 'simple' for vertical plate formulation [-]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number with respect to plate length, [-]
+
+    Notes
+    -----
+    Valid for :math:`0 \le \theta \le 60^\circ` with the vertical.
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Table 9-1, p. 542 and Section 9-3, p. 544.
+    '''
+    if theta < 0.0 or theta > 60.0:
+        warnings.warn("Angle theta={:.1f} deg exceeds recommended range [0, 60] deg for inclined plate correlation.".format(theta), RuntimeWarning)
+
+    cos_theta = max(0.0, cos(radians(theta)))
+    Gr_eff = Gr * cos_theta
+    return Nu_vertical_plate_Cengel(Pr, Gr_eff, method=method)
+
+
+def Nu_horizontal_plate_Cengel(Pr, Gr, hot_surface_facing='up', is_hot_plate=True, flow_regime=None):
+    r'''Calculates the average Nusselt number for natural convection over an
+    isothermal horizontal flat plate according to Çengel & Ghajar (5th Ed) [1]_.
+
+    Characteristic length is defined as :math:`L_c = A_s / p`, where :math:`A_s`
+    is plate surface area and :math:`p` is perimeter.
+
+    (a) Upper surface of a hot plate (or lower surface of a cold plate):
+        .. math::
+            Nu = 0.54 Ra_L^{1/4} \quad (10^4 \le Ra_L \le 10^7) \quad \text{[Eq. 9-22]} \\
+            Nu = 0.15 Ra_L^{1/3} \quad (10^7 \le Ra_L \le 10^{11}) \quad \text{[Eq. 9-23]}
+
+    (b) Lower surface of a hot plate (or upper surface of a cold plate):
+        .. math::
+            Nu = 0.27 Ra_L^{1/4} \quad (10^5 \le Ra_L \le 10^{11}) \quad \text{[Eq. 9-24]}
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Gr : float
+        Grashof number evaluated using characteristic length Lc = As/p [-]
+    hot_surface_facing : str, optional
+        'up' if the heated surface faces upward, 'down' if downward [-]
+    is_hot_plate : bool, optional
+        True if plate temperature Ts > T_inf, False if Ts < T_inf [-]
+    flow_regime : str, optional
+        Explicit regime selection for the upper hot surface:
+        - None: Automatically choose Eq. 9-22 for Ra <= 1e7, Eq. 9-23 for Ra > 1e7.
+        - 'laminar': Force Eq. 9-22 (as in Çengel Example 9-2).
+        - 'turbulent': Force Eq. 9-23.
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number based on Lc = As/p, [-]
+
+    Examples
+    --------
+    Example 9-2 (b) and (c) from [1]_:
+    >>> Nu_horizontal_plate_Cengel(0.7202, 1.65926e7, hot_surface_facing='up', is_hot_plate=True, flow_regime='laminar') # doctest: +ELLIPSIS
+    31.74...
+    >>> Nu_horizontal_plate_Cengel(0.7202, 1.65926e7, hot_surface_facing='up', is_hot_plate=True) # doctest: +ELLIPSIS
+    34.29...
+    >>> Nu_horizontal_plate_Cengel(0.7202, 1.65926e7, hot_surface_facing='down', is_hot_plate=True) # doctest: +ELLIPSIS
+    15.87...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Table 9-1, Eqs. 9-22, 9-23, 9-24, p. 542.
+    '''
+    Ra = Pr * Gr
+    assisted = (is_hot_plate and hot_surface_facing.lower() == 'up') or (not is_hot_plate and hot_surface_facing.lower() == 'down')
+
+    if assisted:
+        if Ra < 1e4 or Ra > 1e11:
+            warnings.warn("Ra={:.3e} is outside recommended range 10^4 <= Ra <= 10^11 for hot surface facing up.".format(Ra), RuntimeWarning)
+        if flow_regime is not None:
+            regime = flow_regime.lower()
+            if regime == 'laminar':
+                return 0.54 * Ra**0.25
+            elif regime == 'turbulent':
+                return 0.15 * Ra**(1.0/3.0)
+            else:
+                raise ValueError("flow_regime '{}' not recognized. Use 'laminar', 'turbulent', or None.".format(flow_regime))
+        if Ra <= 1e7:
+            return 0.54 * Ra**0.25
+        else:
+            return 0.15 * Ra**(1.0/3.0)
+    else:
+        if Ra < 1e5 or Ra > 1e11:
+            warnings.warn("Ra={:.3e} is outside recommended range 10^5 <= Ra <= 10^11 for hot surface facing down.".format(Ra), RuntimeWarning)
+        return 0.27 * Ra**0.25
+
+
+def is_vertical_cylinder_plate_like(L, D, Gr):
+    r'''Evaluates whether a vertical cylinder can be modeled as a vertical
+    flat plate by checking if boundary layer curvature effects are negligible,
+    according to Eq. 9-28 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        D \ge \frac{35 L}{Gr_L^{1/4}}
+
+    Parameters
+    ----------
+    L : float
+        Height of the vertical cylinder, [m]
+    D : float
+        Outer diameter of the vertical cylinder, [m]
+    Gr : float
+        Grashof number with respect to height L, [-]
+
+    Returns
+    -------
+    plate_like : bool
+        True if cylinder curvature effects are negligible and vertical plate
+        relations can be applied; False if cylinder must be treated as slender.
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-28, p. 543, Table 9-1.
+    '''
+    if Gr <= 0 or L <= 0:
+        return False
+    D_crit = 35.0 * L / (Gr**0.25)
+    return D >= D_crit
+
+
+def Nu_vertical_plate_isoflux_Cengel(Pr, Gr_star):
+    r'''Calculates local Nusselt number for laminar natural convection along
+    a vertical flat plate subjected to uniform surface heat flux (isoflux),
+    according to Eq. 9-27 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu_x = 0.60 (Ra_x^*)^{1/5} \quad (10^5 < Ra_x^* < 10^{11})
+
+    where :math:`Ra_x^* = Gr_x^* Pr = \frac{g \beta q_s x^4}{k \nu^2} Pr`.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Gr_star : float
+        Modified Grashof number based on uniform heat flux qs and position x [-]
+
+    Returns
+    -------
+    Nu_x : float
+        Local Nusselt number at position x, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-27, p. 543.
+    '''
+    Ra_star = Gr_star * Pr
+    if Ra_star < 1e5 or Ra_star > 1e11:
+        warnings.warn("Modified Rayleigh number Ra_star={:.3e} is outside recommended range 10^5 < Ra_star < 10^11.".format(Ra_star), RuntimeWarning)
+    return 0.60 * Ra_star**0.20
+
+
+def Ra_vertical_channel(Pr, Gr, S, L):
+    r'''Calculates the channel Rayleigh number for vertical parallel plates
+    of spacing S and height L, according to Eq. 9-30 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Ra_S = \frac{g \beta (T_s - T_\infty) S^3}{\nu^2} Pr = Ra_L \frac{S^3}{L^3}
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Gr : float
+        Grashof number based on channel spacing S [-]
+    S : float
+        Plate spacing (channel gap), [m]
+    L : float
+        Plate height, [m]
+
+    Returns
+    -------
+    Ra_S : float
+        Channel Rayleigh number based on spacing S, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-30, p. 548.
+    '''
+    return Pr * Gr
+
+
+def Nu_vertical_channel_isothermal_Bar_Cohen(Ra_S, S, L):
+    r'''Calculates average Nusselt number for natural convection cooling of
+    isothermal vertical parallel plates (e.g. heat sink fins), according to
+    Bar-Cohen and Rohsenow (1984) and Eq. 9-31 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = \frac{h S}{k} = \left[ \frac{576}{(Ra_S S / L)^2} + \frac{2.873}{(Ra_S S / L)^{0.5}} \right]^{-0.5}
+
+    Parameters
+    ----------
+    Ra_S : float
+        Rayleigh number based on plate spacing S [-]
+    S : float
+        Plate spacing (gap between fins), [m]
+    L : float
+        Plate height, [m]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number with respect to spacing S, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-31, p. 548.
+    .. [2] Bar-Cohen, A., and W. M. Rohsenow. "Thermally Optimum Spacing of
+       Vertical Natural Convection Cooled Parallel Plates." Journal of Heat
+       Transfer 106 (1984): 116-123.
+    '''
+    param = Ra_S * S / L
+    if param <= 0:
+        return 0.0
+    return (576.0 / (param * param) + 2.873 / (param**0.5))**(-0.5)
+
+
+def optimum_fin_spacing_isothermal(L, Ra_L):
+    r'''Calculates the optimum fin spacing for natural convection cooling
+    of an array of vertical rectangular fins (heat sink) maintained at
+    uniform surface temperature, according to Eq. 9-32 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        S_{opt} = 2.714 \frac{L}{Ra_L^{0.25}}
+
+    Parameters
+    ----------
+    L : float
+        Height of the fins in the vertical direction, [m]
+    Ra_L : float
+        Rayleigh number based on fin height L [-]
+
+    Returns
+    -------
+    S_opt : float
+        Optimum fin spacing, [m]
+
+    Examples
+    --------
+    Example 9-3 from [1]_:
+    >>> optimum_fin_spacing_isothermal(0.18, 1.845e7) # doctest: +ELLIPSIS
+    0.00745...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-32, p. 549.
+    '''
+    if Ra_L <= 0:
+        raise ValueError("Rayleigh number Ra_L must be positive.")
+    return 2.714 * L / (Ra_L**0.25)
+
+
+def Nu_optimum_fin_spacing():
+    r'''Returns the constant Nusselt number at optimum fin spacing for an
+    isothermal vertical heat sink, according to Eq. 9-33 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = \frac{h S_{opt}}{k} = 1.307
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number at optimum fin spacing (1.307) [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-33, p. 549.
+    '''
+    return 1.307
+
+
+def Q_finned_surface_natural(h, n, L, H, Ts, Tinf):
+    r'''Calculates total natural convection heat transfer rate from a vertical
+    finned heat sink with n fins of height L and fin profile height/width H,
+    according to Eq. 9-34 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        \dot{Q} = h (2 n L H) (T_s - T_\infty)
+
+    Parameters
+    ----------
+    h : float
+        Convection heat transfer coefficient, [W/(m^2*K)]
+    n : int or float
+        Number of fins on the heat sink [-]
+    L : float
+        Height of the fins in the vertical direction, [m]
+    H : float
+        Protrusion height (depth) of the fins, [m]
+    Ts : float
+        Surface temperature of the fins, [K] or [deg C]
+    Tinf : float
+        Ambient fluid temperature, [K] or [deg C]
+
+    Returns
+    -------
+    Q : float
+        Total heat transfer rate by natural convection, [W]
+
+    Examples
+    --------
+    Example 9-3 from [1]_:
+    >>> Q_finned_surface_natural(4.863, 14, 0.18, 0.024, 80.0, 30.0) # doctest: +ELLIPSIS
+    29.41...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-34, p. 549.
+    '''
+    return h * (2.0 * n * L * H) * (Ts - Tinf)
+
+
+def Ra_star_vertical_channel(Pr, g, beta, qs, S, k, nu):
+    r'''Calculates the modified Rayleigh number for isoflux vertical channels
+    (such as vertical printed circuit boards), according to Eq. 9-35 in
+    Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Ra_S^* = \frac{g \beta q_s S^4}{k \nu^2} Pr
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    g : float
+        Gravitational acceleration, [m/s^2]
+    beta : float
+        Thermal expansion coefficient, [1/K]
+    qs : float
+        Uniform heat flux from the board surface, [W/m^2]
+    S : float
+        Plate spacing (channel width), [m]
+    k : float
+        Thermal conductivity of fluid, [W/(m*K)]
+    nu : float
+        Kinematic viscosity of fluid, [m^2/s]
+
+    Returns
+    -------
+    Ra_star_S : float
+        Modified Rayleigh number based on spacing S, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-35, p. 549.
+    '''
+    return (g * beta * qs * (S**4) / (k * nu**2)) * Pr
+
+
+def Nu_vertical_channel_isoflux_Bar_Cohen(Ra_star_S, S, L):
+    r'''Calculates the Nusselt number at the upper edge of vertical parallel
+    plates under uniform heat flux (e.g. PCBs), where maximum temperature occurs,
+    according to Bar-Cohen and Rohsenow (1984) and Eq. 9-36 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu_L = \frac{h_L S}{k} = \left[ \frac{48}{Ra_S^* S / L} + \frac{2.51}{(Ra_S^* S / L)^{0.4}} \right]^{-0.5}
+
+    Parameters
+    ----------
+    Ra_star_S : float
+        Modified Rayleigh number based on plate spacing S [-]
+    S : float
+        Spacing between adjacent plates, [m]
+    L : float
+        Height of the plates in the vertical direction, [m]
+
+    Returns
+    -------
+    Nu_L : float
+        Nusselt number at the upper edge based on spacing S, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-36, p. 549.
+    '''
+    param = Ra_star_S * S / L
+    if param <= 0:
+        return 0.0
+    return (48.0 / param + 2.51 / (param**0.4))**(-0.5)
+
+
+def optimum_spacing_isoflux(k, nu, L, g, beta, qs, Pr):
+    r'''Calculates the thermally optimum plate spacing for natural convection
+    cooling of vertical parallel plates under uniform heat flux (e.g., PCBs),
+    according to Eq. 9-37 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        S_{opt} = 2.12 \left( \frac{k \nu^2 L}{g \beta q_s Pr} \right)^{0.2}
+
+    Parameters
+    ----------
+    k : float
+        Thermal conductivity of fluid, [W/(m*K)]
+    nu : float
+        Kinematic viscosity of fluid, [m^2/s]
+    L : float
+        Height of the plates in the vertical direction, [m]
+    g : float
+        Gravitational acceleration, [m/s^2]
+    beta : float
+        Thermal expansion coefficient, [1/K]
+    qs : float
+        Uniform heat flux from plate surface, [W/m^2]
+    Pr : float
+        Prandtl number [-]
+
+    Returns
+    -------
+    S_opt : float
+        Optimum plate spacing, [m]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-37, p. 550.
+    '''
+    denom = g * beta * qs * Pr
+    if denom <= 0:
+        raise ValueError("Parameters produce non-positive denominator.")
+    return 2.12 * ((k * (nu**2) * L) / denom)**0.20
+
+
+def Q_PCBs_natural(qs, n, L, H):
+    r'''Calculates total heat transfer rate from an array of vertical
+    printed circuit boards (PCBs) dissipating uniform heat flux,
+    according to Eq. 9-38 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        \dot{Q} = q_s (2 n L H)
+
+    Parameters
+    ----------
+    qs : float
+        Uniform heat flux, [W/m^2]
+    n : int or float
+        Number of boards [-]
+    L : float
+        Board height, [m]
+    H : float
+        Board length/depth, [m]
+
+    Returns
+    -------
+    Q : float
+        Total heat dissipation rate, [W]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-38, p. 550.
+    '''
+    return qs * (2.0 * n * L * H)
+
+
+def Nu_mixed_convection(Nu_forced, Nu_natural, flow_type='assisting', n=3.0):
+    r'''Calculates combined Nusselt number for mixed convection (simultaneous
+    natural and forced convection), according to Eq. 9-66 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu_{combined} = (Nu_{forced}^n \pm Nu_{natural}^n)^{1/n}
+
+    where the plus sign is used for assisting and transverse flows, and the
+    minus sign is used for opposing flows.
+
+    Parameters
+    ----------
+    Nu_forced : float
+        Nusselt number for pure forced convection [-]
+    Nu_natural : float
+        Nusselt number for pure natural convection [-]
+    flow_type : str, optional
+        One of 'assisting', 'opposing', or 'transverse' [-]
+    n : float, optional
+        Correlation exponent; n = 3 for vertical surfaces, larger (3 to 4)
+        for horizontal surfaces. Default is 3.0 [-]
+
+    Returns
+    -------
+    Nu_combined : float
+        Combined Nusselt number for mixed convection, [-]
+
+    Examples
+    --------
+    Example 9-7 from [1]_:
+    >>> Nu_mixed_convection(42.14, 36.46, flow_type='assisting', n=3.0) # doctest: +ELLIPSIS
+    49.77...
+    >>> Nu_mixed_convection(42.14, 36.46, flow_type='opposing', n=3.0) # doctest: +ELLIPSIS
+    29.77...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-66, p. 563.
+    '''
+    flow = flow_type.lower()
+    if flow in ('assisting', 'transverse'):
+        return (Nu_forced**n + Nu_natural**n)**(1.0 / n)
+    elif flow == 'opposing':
+        diff = Nu_forced**n - Nu_natural**n
+        if diff < 0:
+            warnings.warn("Opposing flow difference is negative; returning 0.0", RuntimeWarning)
+            return 0.0
+        return diff**(1.0 / n)
+    else:
+        raise ValueError("Flow type '{}' not recognized. Use 'assisting', 'opposing', or 'transverse'.".format(flow_type))
+
+
+def mixed_convection_regime(Gr, Re):
+    r'''Determines whether a convection process is predominantly forced,
+    predominantly natural, or mixed (both significant) based on the
+    Richardson parameter :math:`Gr / Re^2`, according to Section 9-6 of
+    Çengel & Ghajar (5th Ed) [1]_.
+
+    - :math:`Gr / Re^2 < 0.1`: Forced convection dominates (natural convection negligible).
+    - :math:`Gr / Re^2 > 10`: Natural convection dominates (forced convection negligible).
+    - :math:`0.1 \le Gr / Re^2 \le 10`: Mixed convection (both modes must be considered).
+
+    Parameters
+    ----------
+    Gr : float
+        Grashof number [-]
+    Re : float
+        Reynolds number [-]
+
+    Returns
+    -------
+    regime : str
+        'forced', 'natural', or 'mixed'
+
+    Examples
+    --------
+    Example 9-7 from [1]_:
+    >>> mixed_convection_regime(2.003e7, 4975.0)
+    'mixed'
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Section 9-6, p. 563.
+    '''
+    if Re <= 0:
+        return 'natural'
+    param = Gr / (Re**2)
+    if param < 0.1:
+        return 'forced'
+    elif param > 10.0:
+        return 'natural'
+    else:
+        return 'mixed'
+
+
+def h_air_natural_vertical_plate(delta_T, L):
+    r'''Calculates simplified heat transfer coefficient for natural convection
+    from a vertical plate in air at atmospheric pressure and moderate temperatures (~20-25 deg C).
+
+    .. math::
+        h = 1.42 (\Delta T / L)^{1/4} \quad \text{for laminar flow} \\
+        h = 1.31 \Delta T^{1/3} \quad \text{for turbulent flow}
+
+    Parameters
+    ----------
+    delta_T : float
+        Temperature difference :math:`|T_s - T_\infty|`, [K]
+    L : float
+        Vertical plate height, [m]
+
+    Returns
+    -------
+    h : float
+        Heat transfer coefficient, [W/(m^2*K)]
+    '''
+    if delta_T <= 0 or L <= 0:
+        return 0.0
+    h_lam = 1.42 * (delta_T / L)**0.25
+    h_turb = 1.31 * (delta_T**(1.0/3.0))
+    return max(h_lam, h_turb)
+
+
+def h_air_natural_horizontal_plate(delta_T, L, hot_surface_facing='up', is_hot_plate=True):
+    r'''Calculates simplified heat transfer coefficient for natural convection
+    from a horizontal plate in air at atmospheric pressure and moderate temperatures (~20-25 deg C).
+
+    Parameters
+    ----------
+    delta_T : float
+        Temperature difference :math:`|T_s - T_\infty|`, [K]
+    L : float
+        Characteristic length :math:`L_c = A_s / p`, [m]
+    hot_surface_facing : str, optional
+        'up' or 'down' [-]
+    is_hot_plate : bool, optional
+        True if hot, False if cold [-]
+
+    Returns
+    -------
+    h : float
+        Heat transfer coefficient, [W/(m^2*K)]
+    '''
+    if delta_T <= 0 or L <= 0:
+        return 0.0
+    assisted = (is_hot_plate and hot_surface_facing.lower() == 'up') or (not is_hot_plate and hot_surface_facing.lower() == 'down')
+    if assisted:
+        h_lam = 1.32 * (delta_T / L)**0.25
+        h_turb = 1.52 * (delta_T**(1.0/3.0))
+        return max(h_lam, h_turb)
+    else:
+        return 0.59 * (delta_T / L)**0.25
+
+
+def h_air_natural_horizontal_cylinder(delta_T, D):
+    r'''Calculates simplified heat transfer coefficient for natural convection
+    from a horizontal cylinder in air at atmospheric pressure and moderate temperatures (~20-25 deg C).
+
+    Parameters
+    ----------
+    delta_T : float
+        Temperature difference :math:`|T_s - T_\infty|`, [K]
+    D : float
+        Outer diameter of cylinder, [m]
+
+    Returns
+    -------
+    h : float
+        Heat transfer coefficient, [W/(m^2*K)]
+    '''
+    if delta_T <= 0 or D <= 0:
+        return 0.0
+    h_lam = 1.32 * (delta_T / D)**0.25
+    h_turb = 1.24 * (delta_T**(1.0/3.0))
+    return max(h_lam, h_turb)
