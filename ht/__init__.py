@@ -102,7 +102,7 @@ if not fluids.numerics.is_micropython:
                   conv_supercritical, conv_two_phase, conv_plate, boiling_plate)
     
     global vectorized, numba, units, numba_vectorized
-    if getattr(fluids.numerics, 'PY37', True):
+    if fluids.numerics.PY37:
         def __getattr__(name):
             global vectorized, numba, units, numba_vectorized
             if name == 'vectorized':

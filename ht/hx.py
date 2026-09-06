@@ -26,10 +26,7 @@ from math import exp, floor, log, sqrt, tanh  # tanh= 1/coth
 from fluids.constants import Btu, degree_Fahrenheit, foot, hour, inch
 from fluids.numerics import bisect, brenth, factorial, gamma, horner, iv, quad, secant
 from fluids.numerics import numpy as np
-try:
-    from fluids.piping import BWG_SI, BWG_integers
-except ImportError:
-    from fluids.piping import BWG_SI, BWG_gauges as BWG_integers
+from fluids.piping import BWG_SI, BWG_integers
 
 __all__ = ['effectiveness_from_NTU', 'NTU_from_effectiveness', 'calc_Cmin',
 'calc_Cmax', 'calc_Cr', 'P_NTU_Pp', 'P_NTU_Pc',
