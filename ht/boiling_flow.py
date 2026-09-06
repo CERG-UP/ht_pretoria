@@ -1,4 +1,4 @@
-'''Chemical Engineering Design Library (ChEDL). Utilities for process modeling.
+"""Chemical Engineering Design Library (ChEDL). Utilities for process modeling.
 Copyright (C) 2016, Caleb Bell <Caleb.Andrew.Bell@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,7 +18,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-'''
+"""
+from __future__ import annotations
 
 from math import atan, exp, log10, pi
 
@@ -30,13 +31,21 @@ from fluids.two_phase_voidage import Lockhart_Martinelli_Xtt
 from ht.boiling_nucleic import Cooper, Forster_Zuber
 from ht.conv_internal import turbulent_Dittus_Boelter, turbulent_Gnielinski
 
-__all__ = ['Thome', 'Liu_Winterton', 'Chen_Edelstein', 'Chen_Bennett',
-           'Lazarek_Black', 'Li_Wu', 'Sun_Mishima', 'Yun_Heo_Kim']
+__all__: list[str] = [
+    "Chen_Bennett",
+    "Chen_Edelstein",
+    "Lazarek_Black",
+    "Li_Wu",
+    "Liu_Winterton",
+    "Sun_Mishima",
+    "Thome",
+    "Yun_Heo_Kim",
+]
 
-__numba_additional_funcs__ = ('to_solve_q_Thome',)
+__numba_additional_funcs__ = ("to_solve_q_Thome",)
 
-def Lazarek_Black(m, D, mul, kl, Hvap, q=None, Te=None):
-    r'''Calculates heat transfer coefficient for film boiling of saturated
+def Lazarek_Black(m: float, D: float, mul: float, kl: float, Hvap: float, q: float | None=None, Te: float | None=None) -> float:
+    r"""Calculates heat transfer coefficient for film boiling of saturated
     fluid in vertical tubes for either upward or downward flow. Correlation
     is as shown in [1]_, and also reviewed in [2]_ and [3]_.
 
@@ -101,7 +110,7 @@ def Lazarek_Black(m, D, mul, kl, Hvap, q=None, Te=None):
        "Review and Comparative Analysis of Studies on Saturated Flow Boiling in
        Small Channels." Nanoscale and Microscale Thermophysical Engineering 12,
        no. 3 (September 4, 2008): 187-227. doi:10.1080/15567260802317357.
-    '''
+    """
     G = m/(pi/4*D**2)
     Relo = G*D/mul
     if q is not None:
@@ -111,11 +120,11 @@ def Lazarek_Black(m, D, mul, kl, Hvap, q=None, Te=None):
         # Solved with sympy
         return 27000*30**(71/143)*(1./(G*Hvap))**(357/143)*Relo**(857/286)*Te**(357/143)*kl**(500/143)/D**(500/143)
     else:
-        raise ValueError('Either q or Te is needed for this correlation')
+        raise ValueError("Either q or Te is needed for this correlation")
 
 
-def Li_Wu(m, x, D, rhol, rhog, mul, kl, Hvap, sigma, q=None, Te=None):
-    r'''Calculates heat transfer coefficient for film boiling of saturated
+def Li_Wu(m: float, x: float, D: float, rhol: float, rhog: float, mul: float, kl: float, Hvap: float, sigma: float, q: float | None=None, Te: float | None=None) -> float:
+    r"""Calculates heat transfer coefficient for film boiling of saturated
     fluid in any orientation of flow. Correlation
     is as shown in [1]_, and also reviewed in [2]_ and [3]_.
 
@@ -186,7 +195,7 @@ def Li_Wu(m, x, D, rhol, rhog, mul, kl, Hvap, sigma, q=None, Te=None):
        Boiling Mini/micro-Channel Flows." International Journal of Heat and
        Mass Transfer 77 (October 2014): 74-97.
        doi:10.1016/j.ijheatmasstransfer.2014.04.035.
-    '''
+    """
     G = m/(pi/4*D**2)
     Rel = G*D*(1-x)/mul
     Bo = Bond(rhol=rhol, rhog=rhog, sigma=sigma, L=D)
@@ -197,11 +206,11 @@ def Li_Wu(m, x, D, rhol, rhog, mul, kl, Hvap, sigma, q=None, Te=None):
         A = 334*(Bo*Rel**0.36)**0.4*kl/D
         return A**(10/7.)*Te**(3/7.)/(G**(3/7.)*Hvap**(3/7.))
     else:
-        raise ValueError('Either q or Te is needed for this correlation')
+        raise ValueError("Either q or Te is needed for this correlation")
 
 
-def Sun_Mishima(m, D, rhol, rhog, mul, kl, Hvap, sigma, q=None, Te=None):
-    r'''Calculates heat transfer coefficient for film boiling of saturated
+def Sun_Mishima(m: float, D: float, rhol: float, rhog: float, mul: float, kl: float, Hvap: float, sigma: float, q: float | None=None, Te: float | None=None) -> float:
+    r"""Calculates heat transfer coefficient for film boiling of saturated
     fluid in any orientation of flow. Correlation
     is as shown in [1]_, and also reviewed in [2]_.
 
@@ -268,7 +277,7 @@ def Sun_Mishima(m, D, rhol, rhog, mul, kl, Hvap, sigma, q=None, Te=None):
        of Flow Boiling Heat Transfer Coefficients for Carbon Dioxide."
        International Journal of Refrigeration 36, no. 8 (December 2013):
        2017-39. doi:10.1016/j.ijrefrig.2013.05.015.
-    '''
+    """
     G = m/(pi/4*D**2)
     V = G/rhol
     Relo = G*D/mul
@@ -280,12 +289,12 @@ def Sun_Mishima(m, D, rhol, rhog, mul, kl, Hvap, sigma, q=None, Te=None):
         A = 6*Relo**1.05/(We**0.191*(rhol/rhog)**0.142)*kl/D
         return A**(50/23.)*Te**(27/23.)/(G**(27/23.)*Hvap**(27/23.))
     else:
-        raise ValueError('Either q or Te is needed for this correlation')
+        raise ValueError("Either q or Te is needed for this correlation")
 
 
-def Thome(m, x, D, rhol, rhog, mul, mug, kl, kg, Cpl, Cpg, Hvap, sigma, Psat,
-          Pc, q=None, Te=None):
-    r'''Calculates heat transfer coefficient for film boiling of saturated
+def Thome(m: float, x: float, D: float, rhol: float, rhog: float, mul: float, mug: float, kl: float, kg: float, Cpl: float, Cpg: float, Hvap: float, sigma: float, Psat: float,
+          Pc: float, q: float | None=None, Te: float | None=None) -> float:
+    r"""Calculates heat transfer coefficient for film boiling of saturated
     fluid in any orientation of flow. Correlation
     is as developed in [1]_ and [2]_, and also reviewed [3]_. This is a
     complicated model, but expected to have more accuracy as a result.
@@ -459,12 +468,12 @@ def Thome(m, x, D, rhol, rhog, mul, mug, kl, kg, Cpl, Cpg, Hvap, sigma, Psat,
        "Review and Comparative Analysis of Studies on Saturated Flow Boiling in
        Small Channels." Nanoscale and Microscale Thermophysical Engineering 12,
        no. 3 (September 4, 2008): 187-227. doi:10.1080/15567260802317357.
-    '''
+    """
     if q is None and Te is not None:
         q = secant(to_solve_q_Thome, 1E4, args=( m, x, D, rhol, rhog, kl, kg, mul, mug, Cpl, Cpg, sigma, Hvap, Psat, Pc, Te))
         return Thome(m=m, x=x, D=D, rhol=rhol, rhog=rhog, kl=kl, kg=kg, mul=mul, mug=mug, Cpl=Cpl, Cpg=Cpg, sigma=sigma, Hvap=Hvap, Psat=Psat, Pc=Pc, q=q)
     elif q is None and Te is None:
-        raise ValueError('Either q or Te is needed for this correlation')
+        raise ValueError("Either q or Te is needed for this correlation")
     C_delta0 = 0.3E-6
     G = m/(pi/4*D**2)
     Rel = G*D*(1-x)/mul
@@ -515,12 +524,12 @@ def Thome(m, x, D, rhol, rhog, mul, mug, kl, kg, Cpl, Cpg, Hvap, sigma, Psat,
     h_film = 2*kl/(delta0 + C_delta0)
     return tl/tau*h_Zl + t_film/tau*h_film + t_dry/tau*h_Zg
 
-def to_solve_q_Thome(q, m, x, D, rhol, rhog, kl, kg, mul, mug, Cpl, Cpg, sigma, Hvap, Psat, Pc, Te):
+def to_solve_q_Thome(q: float, m: float, x: float, D: float, rhol: float, rhog: float, kl: float, kg: float, mul: float, mug: float, Cpl: float, Cpg: float, sigma: float, Hvap: float, Psat: float, Pc: float, Te: float) -> float:
     err = q/Thome(m=m, x=x, D=D, rhol=rhol, rhog=rhog, kl=kl, kg=kg, mul=mul, mug=mug, Cpl=Cpl, Cpg=Cpg, sigma=sigma, Hvap=Hvap, Psat=Psat, Pc=Pc, q=q) - Te
     return err
 
-def Yun_Heo_Kim(m, x, D, rhol, mul, Hvap, sigma, q=None, Te=None):
-    r'''Calculates heat transfer coefficient for film boiling of saturated
+def Yun_Heo_Kim(m: float, x: float, D: float, rhol: float, mul: float, Hvap: float, sigma: float, q: float | None=None, Te: float | None=None) -> float:
+    r"""Calculates heat transfer coefficient for film boiling of saturated
     fluid in any orientation of flow. Correlation
     is as shown in [1]_ and [2]_, and also reviewed in [3]_.
 
@@ -587,7 +596,7 @@ def Yun_Heo_Kim(m, x, D, rhol, mul, Hvap, sigma, q=None, Te=None):
        "Review and Comparative Analysis of Studies on Saturated Flow Boiling in
        Small Channels." Nanoscale and Microscale Thermophysical Engineering 12,
        no. 3 (September 4, 2008): 187-227. doi:10.1080/15567260802317357.
-    '''
+    """
     G = m/(pi/4*D**2)
     V = G/rhol
     Rel = G*D*(1-x)/mul
@@ -599,12 +608,12 @@ def Yun_Heo_Kim(m, x, D, rhol, mul, Hvap, sigma, q=None, Te=None):
         A = 136876*(We)**0.1993*Rel**-0.1626*(Te/G/Hvap)**0.1993
         return A**(10000/8007.)
     else:
-        raise ValueError('Either q or Te is needed for this correlation')
+        raise ValueError("Either q or Te is needed for this correlation")
 
 
-def Chen_Edelstein(m, x, D, rhol, rhog, mul, mug, kl, Cpl, Hvap, sigma,
-                   dPsat, Te):
-    r'''Calculates heat transfer coefficient for film boiling of saturated
+def Chen_Edelstein(m: float, x: float, D: float, rhol: float, rhog: float, mul: float, mug: float, kl: float, Cpl: float, Hvap: float, sigma: float,
+                   dPsat: float, Te: float) -> float:
+    r"""Calculates heat transfer coefficient for film boiling of saturated
     fluid in any orientation of flow. Correlation
     is developed in [1]_ and [2]_, and reviewed in [3]_. This model is one of
     the most often used. It uses the Dittus-Boelter correlation for turbulent
@@ -702,7 +711,7 @@ def Chen_Edelstein(m, x, D, rhol, rhog, mul, mug, kl, Cpl, Hvap, sigma,
        "Review and Comparative Analysis of Studies on Saturated Flow Boiling in
        Small Channels." Nanoscale and Microscale Thermophysical Engineering 12,
        no. 3 (September 4, 2008): 187-227. doi:10.1080/15567260802317357.
-    '''
+    """
     G = m/(pi/4*D**2)
     Rel = D*G*(1-x)/mul
     Prl = Prandtl(Cp=Cpl, mu=mul, k=kl)
@@ -717,9 +726,9 @@ def Chen_Edelstein(m, x, D, rhol, rhog, mul, mug, kl, Cpl, Hvap, sigma,
     return hnb*S + hl*F
 
 
-def Chen_Bennett(m, x, D, rhol, rhog, mul, mug, kl, Cpl, Hvap, sigma,
-                   dPsat, Te):
-    r'''Calculates heat transfer coefficient for film boiling of saturated
+def Chen_Bennett(m: float, x: float, D: float, rhol: float, rhog: float, mul: float, mug: float, kl: float, Cpl: float, Hvap: float, sigma: float,
+                   dPsat: float, Te: float) -> float:
+    r"""Calculates heat transfer coefficient for film boiling of saturated
     fluid in any orientation of flow. Correlation
     is developed in [1]_ and [2]_, and reviewed in [3]_. This model is one of
     the most often used, and replaces the `Chen_Edelstein` correlation. It uses
@@ -821,7 +830,7 @@ def Chen_Bennett(m, x, D, rhol, rhog, mul, mug, kl, Cpl, Hvap, sigma,
        "Review and Comparative Analysis of Studies on Saturated Flow Boiling in
        Small Channels." Nanoscale and Microscale Thermophysical Engineering 12,
        no. 3 (September 4, 2008): 187-227. doi:10.1080/15567260802317357.
-    '''
+    """
     G = m/(pi/4*D**2)
     Rel = D*G*(1-x)/mul
     Prl = Prandtl(Cp=Cpl, mu=mul, k=kl)
@@ -836,8 +845,8 @@ def Chen_Bennett(m, x, D, rhol, rhog, mul, mug, kl, Cpl, Hvap, sigma,
     return hnb*S + hl*F
 
 
-def Liu_Winterton(m, x, D, rhol, rhog, mul, kl, Cpl, MW, P,  Pc, Te):
-    r'''Calculates heat transfer coefficient for film boiling of saturated
+def Liu_Winterton(m: float, x: float, D: float, rhol: float, rhog: float, mul: float, kl: float, Cpl: float, MW: float, P: float,  Pc: float, Te: float) -> float:
+    r"""Calculates heat transfer coefficient for film boiling of saturated
     fluid in any orientation of flow. Correlation
     is as developed in [1]_, also reviewed in [2]_ and [3]_.
 
@@ -925,7 +934,7 @@ def Liu_Winterton(m, x, D, rhol, rhog, mul, kl, Cpl, MW, P,  Pc, Te):
        "Review and Comparative Analysis of Studies on Saturated Flow Boiling in
        Small Channels." Nanoscale and Microscale Thermophysical Engineering 12,
        no. 3 (September 4, 2008): 187-227. doi:10.1080/15567260802317357.
-    '''
+    """
     G = m/(pi/4*D**2)
     ReL = D*G/mul
     Prl = Prandtl(Cp=Cpl, mu=mul, k=kl)
