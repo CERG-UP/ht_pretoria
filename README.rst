@@ -1,5 +1,5 @@
 ==================
-Heat Transfer (ht)
+Heat Transfer (ht) - Pretoria version
 ==================
 
 .. image:: http://img.shields.io/pypi/v/ht.svg?style=flat
@@ -23,6 +23,11 @@ Heat Transfer (ht)
 
 
 .. contents::
+
+What is ht_pretoria?
+-----------
+
+A modified version of ht, where those correlations from Cenghal and Ghajar's "Heat and Mass Transfer" not natively included in ht are added. This is intended to be a resource for university instruction particularly. 
 
 What is ht?
 -----------
