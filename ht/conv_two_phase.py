@@ -1,4 +1,4 @@
-'''Chemical Engineering Design Library (ChEDL). Utilities for process modeling.
+"""Chemical Engineering Design Library (ChEDL). Utilities for process modeling.
 Copyright (C) 2016, 2017, 2018 Caleb Bell <Caleb.Andrew.Bell@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,7 +18,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-'''
+"""
+from __future__ import annotations
 
 from math import pi
 
@@ -26,14 +27,23 @@ from fluids.core import Prandtl, Reynolds
 
 from ht.conv_internal import laminar_entry_Seider_Tate
 
-__all__ = ['Davis_David', 'Elamvaluthi_Srinivas', 'Groothuis_Hendal',
-           'Hughmark', 'Knott', 'Kudirka_Grosh_McFadden', 'Martin_Sims',
-           'Ravipudi_Godbold', 'Aggour',
-           'h_two_phase', 'h_two_phase_methods']
+__all__: list[str] = [
+    "Aggour",
+    "Davis_David",
+    "Elamvaluthi_Srinivas",
+    "Groothuis_Hendal",
+    "Hughmark",
+    "Knott",
+    "Kudirka_Grosh_McFadden",
+    "Martin_Sims",
+    "Ravipudi_Godbold",
+    "h_two_phase",
+    "h_two_phase_methods",
+]
 
 
-def Davis_David(m, x, D, rhol, rhog, Cpl, kl, mul):
-    r'''Calculates the two-phase non-boiling heat transfer coefficient of a
+def Davis_David(m: float, x: float, D: float, rhol: float, rhog: float, Cpl: float, kl: float, mul: float) -> float:
+    r"""Calculates the two-phase non-boiling heat transfer coefficient of a
     liquid and gas flowing inside a tube of any inclination, as in [1]_ and
     reviewed in [2]_.
 
@@ -89,15 +99,15 @@ def Davis_David(m, x, D, rhol, rhog, Cpl, kl, mul):
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     G = m/(pi/4*D**2)
     Prl = Prandtl(Cp=Cpl, mu=mul, k=kl)
     Nu_TP = 0.060*(rhol/rhog)**0.28*(D*G*x/mul)**0.87*Prl**0.4
     return Nu_TP*kl/D
 
 
-def Elamvaluthi_Srinivas(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
-    r'''Calculates the two-phase non-boiling heat transfer coefficient of a
+def Elamvaluthi_Srinivas(m: float, x: float, D: float, rhol: float, rhog: float, Cpl: float, kl: float, mug: float, mu_b: float, mu_w: float | None=None) -> float:
+    r"""Calculates the two-phase non-boiling heat transfer coefficient of a
     liquid and gas flowing inside a tube of any inclination, as in [1]_ and
     reviewed in [2]_.
 
@@ -164,7 +174,7 @@ def Elamvaluthi_Srinivas(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     Vg = m*x/(rhog*pi/4*D**2)
     Vl = m*(1-x)/(rhol*pi/4*D**2)
 
@@ -176,9 +186,9 @@ def Elamvaluthi_Srinivas(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
     return Nu_TP*kl/D
 
 
-def Groothuis_Hendal(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None,
-                     water=False):
-    r'''Calculates the two-phase non-boiling heat transfer coefficient of a
+def Groothuis_Hendal(m: float, x: float, D: float, rhol: float, rhog: float, Cpl: float, kl: float, mug: float, mu_b: float, mu_w: float | None=None,
+                     water: bool=False) -> float:
+    r"""Calculates the two-phase non-boiling heat transfer coefficient of a
     liquid and gas flowing inside a tube of any inclination, as in [1]_ and
     reviewed in [2]_.
 
@@ -250,7 +260,7 @@ def Groothuis_Hendal(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None,
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     Vg = m*x/(rhog*pi/4*D**2)
     Vl = m*(1-x)/(rhol*pi/4*D**2)
 
@@ -266,8 +276,8 @@ def Groothuis_Hendal(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None,
     return Nu_TP*kl/D
 
 
-def Hughmark(m, x, alpha, D, L, Cpl, kl, mu_b=None, mu_w=None):
-    r'''Calculates the two-phase non-boiling laminar heat transfer coefficient
+def Hughmark(m: float, x: float, alpha: float, D: float, L: float, Cpl: float, kl: float, mu_b: float | None=None, mu_w: float | None=None) -> float:
+    r"""Calculates the two-phase non-boiling laminar heat transfer coefficient
     of a liquid and gas flowing inside a tube of any inclination, as in [1]_
     and reviewed in [2]_.
 
@@ -331,7 +341,7 @@ def Hughmark(m, x, alpha, D, L, Cpl, kl, mu_b=None, mu_w=None):
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     ml = m*(1-x)
     RL = 1-alpha
     Nu_TP = 1.75*(RL)**-0.5*(ml*Cpl/RL/kl/L)**(1/3.)
@@ -340,9 +350,9 @@ def Hughmark(m, x, alpha, D, L, Cpl, kl, mu_b=None, mu_w=None):
     return Nu_TP*kl/D
 
 
-def Knott(m, x, D, rhol, rhog, Cpl=None, kl=None, mu_b=None, mu_w=None, L=None,
-          hl=None):
-    r'''Calculates the two-phase non-boiling heat transfer coefficient of a
+def Knott(m: float, x: float, D: float, rhol: int, rhog: float, Cpl: float | None=None, kl: float | None=None, mu_b: float | None=None, mu_w: float | None=None, L: float | None=None,
+          hl: None=None) -> float:
+    r"""Calculates the two-phase non-boiling heat transfer coefficient of a
     liquid and gas flowing inside a tube of any inclination, as in [1]_ and
     reviewed in [2]_.
 
@@ -413,7 +423,7 @@ def Knott(m, x, D, rhol, rhog, Cpl=None, kl=None, mu_b=None, mu_w=None, L=None,
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     Vgs = m*x/(rhog*pi/4*D**2)
     Vls = m*(1-x)/(rhol*pi/4*D**2)
     if not hl:
@@ -425,8 +435,8 @@ def Knott(m, x, D, rhol, rhog, Cpl=None, kl=None, mu_b=None, mu_w=None, L=None,
     return hl*(1 + Vgs/Vls)**(1/3.)
 
 
-def Kudirka_Grosh_McFadden(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
-    r'''Calculates the two-phase non-boiling heat transfer coefficient of a
+def Kudirka_Grosh_McFadden(m: float, x: float, D: float, rhol: float, rhog: float, Cpl: float, kl: float, mug: float, mu_b: float, mu_w: float | None=None) -> float:
+    r"""Calculates the two-phase non-boiling heat transfer coefficient of a
     liquid and gas flowing inside a tube of any inclination, as in [1]_ and
     reviewed in [2]_.
 
@@ -490,7 +500,7 @@ def Kudirka_Grosh_McFadden(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     Vgs = m*x/(rhog*pi/4*D**2)
     Vls = m*(1-x)/(rhol*pi/4*D**2)
     Prl = Prandtl(Cp=Cpl, mu=mu_b, k=kl)
@@ -501,9 +511,9 @@ def Kudirka_Grosh_McFadden(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
     return Nu*kl/D
 
 
-def Martin_Sims(m, x, D, rhol, rhog, hl=None,
-                Cpl=None, kl=None, mu_b=None, mu_w=None, L=None):
-    r'''Calculates the two-phase non-boiling heat transfer coefficient of a
+def Martin_Sims(m: float, x: float, D: float, rhol: float, rhog: float, hl: float | None=None,
+                Cpl: float | None=None, kl: float | None=None, mu_b: float | None=None, mu_w: float | None=None, L: float | None=None) -> float:
+    r"""Calculates the two-phase non-boiling heat transfer coefficient of a
     liquid and gas flowing inside a tube of any inclination, as in [1]_ and
     reviewed in [2]_.
 
@@ -566,7 +576,7 @@ def Martin_Sims(m, x, D, rhol, rhog, hl=None,
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     Vgs = m*x/(rhog*pi/4*D**2)
     Vls = m*(1-x)/(rhol*pi/4*D**2)
     if hl is None:
@@ -578,8 +588,8 @@ def Martin_Sims(m, x, D, rhol, rhog, hl=None,
     return hl*(1.0 + 0.64*(Vgs/Vls)**0.5)
 
 
-def Ravipudi_Godbold(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
-    r'''Calculates the two-phase non-boiling heat transfer coefficient of a
+def Ravipudi_Godbold(m: float, x: float, D: float, rhol: float, rhog: float, Cpl: float, kl: float, mug: float, mu_b: float, mu_w: float | None=None) -> float:
+    r"""Calculates the two-phase non-boiling heat transfer coefficient of a
     liquid and gas flowing inside a tube of any inclination, as in [1]_ and
     reviewed in [2]_.
 
@@ -641,7 +651,7 @@ def Ravipudi_Godbold(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     Vgs = m*x/(rhog*pi/4*D**2)
     Vls = m*(1-x)/(rhol*pi/4*D**2)
     Prl = Prandtl(Cp=Cpl, mu=mu_b, k=kl)
@@ -652,9 +662,9 @@ def Ravipudi_Godbold(m, x, D, rhol, rhog, Cpl, kl, mug, mu_b, mu_w=None):
     return Nu*kl/D
 
 
-def Aggour(m, x, alpha, D, rhol, Cpl, kl, mu_b, mu_w=None, L=None,
-           turbulent=None):
-    r'''Calculates the two-phase non-boiling laminar heat transfer coefficient
+def Aggour(m: float, x: float, alpha: float, D: float, rhol: float, Cpl: float, kl: float, mu_b: float, mu_w: float | None=None, L: float | None=None,
+           turbulent: None=None) -> float:
+    r"""Calculates the two-phase non-boiling laminar heat transfer coefficient
     of a liquid and gas flowing inside a tube of any inclination, as in [1]_
     and reviewed in [2]_.
 
@@ -733,7 +743,7 @@ def Aggour(m, x, alpha, D, rhol, Cpl, kl, mu_b, mu_w=None, L=None,
        Seven Sets of Experimental Data, Including Flow Pattern and Tube
        Inclination Effects." Heat Transfer Engineering 20, no. 1 (February 1,
        1999): 15-40. doi:10.1080/014576399271691.
-    '''
+    """
     Vls = m*(1-x)/(rhol*pi/4*D**2)
     Vl = Vls/(1.-alpha)
 
@@ -751,20 +761,20 @@ def Aggour(m, x, alpha, D, rhol, Cpl, kl, mu_b, mu_w=None, L=None,
 
 
 conv_two_phase_methods = {
-    'Davis-David': (Davis_David, ('m', 'x', 'D', 'rhol', 'rhog', 'Cpl', 'kl', 'mul')),
-    'Elamvaluthi_Srinivas': (Elamvaluthi_Srinivas, ('m', 'x', 'D', 'rhol', 'rhog', 'Cpl', 'kl', 'mug', 'mu_b', 'mu_w')),
-    'Groothuis_Hendal': (Groothuis_Hendal, ('m', 'x', 'D', 'rhol', 'rhog', 'Cpl', 'kl', 'mug', 'mu_b', 'mu_w')),
-    'Hughmark': (Hughmark, ('m', 'x', 'alpha', 'D', 'L', 'Cpl', 'kl', 'mu_b', 'mu_w')),
-    'Knott': (Knott, ('m', 'x', 'D', 'rhol', 'rhog', 'Cpl', 'kl', 'mu_b', 'mu_w', 'L')),
-    'Kudirka_Grosh_McFadden': (Kudirka_Grosh_McFadden, ('m', 'x', 'D', 'rhol', 'rhog', 'Cpl', 'kl', 'mug', 'mu_b', 'mu_w')),
-    'Martin_Sims': (Martin_Sims, ('m', 'x', 'D', 'rhol', 'rhog', 'Cpl', 'kl', 'mu_b', 'mu_w', 'L')),
-    'Ravipudi_Godbold': (Ravipudi_Godbold, ('m', 'x', 'D', 'rhol', 'rhog', 'Cpl', 'kl', 'mug', 'mu_b', 'mu_w')),
-    'Aggour': (Aggour, ('m', 'x', 'alpha', 'D', 'rhol', 'Cpl', 'kl', 'mu_b', 'mu_w', 'L')),
+    "Davis-David": (Davis_David, ("m", "x", "D", "rhol", "rhog", "Cpl", "kl", "mul")),
+    "Elamvaluthi_Srinivas": (Elamvaluthi_Srinivas, ("m", "x", "D", "rhol", "rhog", "Cpl", "kl", "mug", "mu_b", "mu_w")),
+    "Groothuis_Hendal": (Groothuis_Hendal, ("m", "x", "D", "rhol", "rhog", "Cpl", "kl", "mug", "mu_b", "mu_w")),
+    "Hughmark": (Hughmark, ("m", "x", "alpha", "D", "L", "Cpl", "kl", "mu_b", "mu_w")),
+    "Knott": (Knott, ("m", "x", "D", "rhol", "rhog", "Cpl", "kl", "mu_b", "mu_w", "L")),
+    "Kudirka_Grosh_McFadden": (Kudirka_Grosh_McFadden, ("m", "x", "D", "rhol", "rhog", "Cpl", "kl", "mug", "mu_b", "mu_w")),
+    "Martin_Sims": (Martin_Sims, ("m", "x", "D", "rhol", "rhog", "Cpl", "kl", "mu_b", "mu_w", "L")),
+    "Ravipudi_Godbold": (Ravipudi_Godbold, ("m", "x", "D", "rhol", "rhog", "Cpl", "kl", "mug", "mu_b", "mu_w")),
+    "Aggour": (Aggour, ("m", "x", "alpha", "D", "rhol", "Cpl", "kl", "mu_b", "mu_w", "L")),
 }
 
 # Not actually ranked
-conv_two_phase_methods_ranked = ['Knott', 'Martin_Sims', 'Kudirka_Grosh_McFadden', 'Groothuis_Hendal',
-                                 'Aggour', 'Hughmark', 'Elamvaluthi_Srinivas', 'Davis-David', 'Ravipudi_Godbold']
+conv_two_phase_methods_ranked = ["Knott", "Martin_Sims", "Kudirka_Grosh_McFadden", "Groothuis_Hendal",
+                                 "Aggour", "Hughmark", "Elamvaluthi_Srinivas", "Davis-David", "Ravipudi_Godbold"]
 
 conv_two_phase_bad_method = f"Correlation name not recognized; the availble methods are {list(conv_two_phase_methods.keys())}."
 """Generating code:
@@ -792,7 +802,7 @@ for m in conv_two_phase_methods_ranked:
 def h_two_phase_methods(m, x, D, Cpl, kl, rhol=None, rhog=None, mul=None,
                         mu_b=None, mu_w=None, mug=None, L=None, alpha=None,
                         check_ranges=True):
-    r'''Returns a list of correlation names for the case of two-phase
+    r"""Returns a list of correlation names for the case of two-phase
     non-boiling liquid-gas laminar flow heat transfer inside a tube.
 
     Parameters
@@ -842,7 +852,7 @@ def h_two_phase_methods(m, x, D, Cpl, kl, rhol=None, rhog=None, mul=None,
     --------
     >>> h_two_phase_methods(m=1, x=.9, D=.3, alpha=.9, rhol=1000, Cpl=2300, kl=.6, mu_b=1E-3, mu_w=1.2E-3, L=5)[0]
     'Aggour'
-    '''
+    """
     methods = []
     if rhol is not None and rhog is not None and mu_b is not None and mu_w is not None and L is not None:
         methods.append("Knott")
@@ -865,10 +875,10 @@ def h_two_phase_methods(m, x, D, Cpl, kl, rhol=None, rhog=None, mul=None,
     return methods
 
 
-def h_two_phase(m, x, D, Cpl, kl, rhol=None, rhog=None, mul=None,
-                mu_b=None, mu_w=None, mug=None, L=None, alpha=None,
-                method=None):
-    r'''Calculates the two-phase non-boiling laminar heat transfer coefficient
+def h_two_phase(m: float, x: float, D: float, Cpl: float, kl: float, rhol: float | None=None, rhog: None=None, mul: None=None,
+                mu_b: float | None=None, mu_w: float | None=None, mug: None=None, L: float | None=None, alpha: float | None=None,
+                method: str | None=None) -> float:
+    r"""Calculates the two-phase non-boiling laminar heat transfer coefficient
     of a liquid and gas flowing inside a tube according to the specified
     method. Nine methods are available.
 
@@ -922,7 +932,7 @@ def h_two_phase(m, x, D, Cpl, kl, rhol=None, rhog=None, mul=None,
     --------
     >>> h_two_phase(m=1, x=.9, D=.3, alpha=.9, rhol=1000, Cpl=2300, kl=.6, mu_b=1E-3, mu_w=1.2E-3, L=5, method='Aggour')
     420.9347146885667
-    '''
+    """
     if method is None:
         method2 = h_two_phase_methods(m=m, x=x, D=D, Cpl=Cpl, kl=kl, rhol=rhol, rhog=rhog, mul=mul, mu_b=mu_b, mu_w=mu_w, mug=mug, L=L, alpha=alpha, check_ranges=True)[0]
     else:

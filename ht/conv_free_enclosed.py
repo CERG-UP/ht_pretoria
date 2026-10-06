@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 '''
 
-from math import exp, log
+from math import cos, exp, log, pi, radians, sin
+import warnings
 
 from fluids.numerics import bisplev, horner, implementation_optimize_tck, secant
 
@@ -30,6 +31,27 @@ __all__ = ['Nu_Nusselt_Rayleigh_Holling_Herwig', 'Nu_Nusselt_Rayleigh_Probert',
            'Nu_Nusselt_vertical_Thess',
            'Nu_vertical_helical_coil_Ali',
            'Nu_vertical_helical_coil_Prabhanjan_Rennie_Raghavan',
+           'Q_enclosure_natural',
+           'k_eff_enclosure',
+           'Nu_horizontal_enclosure_Jakob',
+           'Nu_horizontal_enclosure_Globe_Dropkin',
+           'Nu_horizontal_enclosure_Hollands',
+           'Nu_inclined_enclosure_Hollands',
+           'critical_angle_inclined_enclosure',
+           'Nu_inclined_enclosure_Catton',
+           'Nu_inclined_enclosure_Arnold',
+           'Nu_vertical_enclosure_Berkovsky_Polevikov_1',
+           'Nu_vertical_enclosure_Berkovsky_Polevikov_2',
+           'Nu_vertical_enclosure_MacGregor_Emery_laminar',
+           'Nu_vertical_enclosure_MacGregor_Emery_turbulent',
+           'Nu_vertical_enclosure_Cengel',
+           'F_concentric_cylinders',
+           'k_eff_concentric_cylinders_Raithby_Hollands',
+           'Q_concentric_cylinders_natural',
+           'F_concentric_spheres',
+           'k_eff_concentric_spheres_Raithby_Hollands',
+           'Q_concentric_spheres_natural',
+           'emissivity_effective_parallel_plates',
            ]
 
 __numba_additional_funcs__ = ['Nu_Nusselt_Rayleigh_Holling_Herwig_err']
@@ -792,3 +814,844 @@ def Nu_vertical_helical_coil_Prabhanjan_Rennie_Raghavan(Pr, Gr):
     '''
     Ra = Pr*Gr
     return 0.0749*Ra**0.3421
+
+
+def Q_enclosure_natural(k_eff, A, T1, T2, L):
+    r'''Calculates the steady-state heat transfer rate through a planar
+    enclosure (such as a double-pane window) by natural convection,
+    according to Eq. 9-40 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        \dot{Q} = k_{eff} A \frac{T_1 - T_2}{L}
+
+    Parameters
+    ----------
+    k_eff : float
+        Effective thermal conductivity of the enclosed fluid, [W/(m*K)]
+    A : float
+        Heat transfer surface area of one of the plates, [m^2]
+    T1 : float
+        Temperature of the hotter surface, [K] or [deg C]
+    T2 : float
+        Temperature of the colder surface, [K] or [deg C]
+    L : float
+        Distance between the two plates (gap thickness), [m]
+
+    Returns
+    -------
+    Q : float
+        Rate of heat transfer through the enclosure, [W]
+
+    Examples
+    --------
+    Example 9-4 from [1]_:
+    >>> Q_enclosure_natural(0.03385, 1.6, 12.0, 2.0, 0.02) # doctest: +ELLIPSIS
+    27.08...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-40, p. 553.
+    '''
+    if L <= 0:
+        raise ValueError("Gap thickness L must be positive.")
+    return k_eff * A * (T1 - T2) / L
+
+
+def k_eff_enclosure(k, Nu):
+    r'''Calculates the effective thermal conductivity of an enclosure fluid,
+    according to Eq. 9-41 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        k_{eff} = k \cdot Nu
+
+    Parameters
+    ----------
+    k : float
+        Actual thermal conductivity of the fluid, [W/(m*K)]
+    Nu : float
+        Nusselt number of the enclosure flow [-]
+
+    Returns
+    -------
+    k_eff : float
+        Effective thermal conductivity (>= k), [W/(m*K)]
+
+    Notes
+    -----
+    When Nu <= 1, convection currents are negligible and heat transfer
+    is purely conductive, so k_eff = k.
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-41, p. 553.
+    '''
+    Nu_eff = max(1.0, Nu)
+    return k * Nu_eff
+
+
+def Nu_horizontal_enclosure_Jakob(Ra, regime='auto'):
+    r'''Calculates the Nusselt number for natural convection inside a horizontal
+    enclosure containing air (or gases with 0.5 < Pr < 2) heated from below,
+    according to Jakob (1949) and Eqs. 9-44, 9-45 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 0.195 Ra_L^{1/4} \quad (10^4 < Ra_L < 4 \times 10^5) \quad \text{[Eq. 9-44]} \\
+        Nu = 0.068 Ra_L^{1/3} \quad (4 \times 10^5 \le Ra_L < 10^7) \quad \text{[Eq. 9-45]}
+
+    For :math:`Ra_L < 1708`, :math:`Nu = 1` (pure conduction).
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on plate spacing L [-]
+    regime : str, optional
+        'auto', 'laminar', or 'turbulent' [-]
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number based on spacing L, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eqs. 9-44, 9-45, p. 554.
+    .. [2] Jakob, M. Heat Transfer. Vol. 1. New York: John Wiley & Sons, 1949.
+    '''
+    if Ra < 1708:
+        return 1.0
+    r = regime.lower()
+    if r == 'laminar':
+        if Ra < 1e4 or Ra > 4e5:
+            warnings.warn("Ra={:.3e} is outside recommended range 10^4 < Ra < 4e5 for Jakob laminar correlation.".format(Ra), RuntimeWarning)
+        return 0.195 * Ra**0.25
+    elif r == 'turbulent':
+        if Ra < 4e5 or Ra > 1e7:
+            warnings.warn("Ra={:.3e} is outside recommended range 4e5 < Ra < 10^7 for Jakob turbulent correlation.".format(Ra), RuntimeWarning)
+        return 0.068 * Ra**(1.0/3.0)
+    elif r == 'auto':
+        if Ra < 4e5:
+            return 0.195 * Ra**0.25
+        else:
+            return 0.068 * Ra**(1.0/3.0)
+    else:
+        raise ValueError("Regime '{}' not recognized. Use 'auto', 'laminar', or 'turbulent'.".format(regime))
+
+
+def Nu_horizontal_enclosure_Globe_Dropkin(Pr, Ra):
+    r'''Calculates the Nusselt number for natural convection inside a horizontal
+    enclosure heated from below containing liquids (e.g., water, silicone oil,
+    mercury), according to Globe & Dropkin (1959) and Eq. 9-46 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 0.069 Ra_L^{1/3} Pr^{0.074} \quad (3 \times 10^5 < Ra_L < 7 \times 10^9)
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Ra : float
+        Rayleigh number based on plate spacing L [-]
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number based on spacing L, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-46, p. 554.
+    .. [2] Globe, S., and D. Dropkin. "Natural-Convection Heat Transfer in
+       Liquids Confined by Two Horizontal Plates and Heated from Below."
+       Journal of Heat Transfer 81 (1959): 24-28.
+    '''
+    if Ra < 3e5 or Ra > 7e9:
+        warnings.warn("Ra={:.3e} is outside recommended range 3e5 < Ra < 7e9 for Globe-Dropkin correlation.".format(Ra), RuntimeWarning)
+    return 0.069 * (Ra**(1.0/3.0)) * (Pr**0.074)
+
+
+def Nu_horizontal_enclosure_Hollands(Ra):
+    r'''Calculates the Nusselt number for natural convection inside a horizontal
+    enclosure heated from below, according to Hollands et al. (1976) and
+    Eq. 9-47 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 1 + 1.44 \left[ 1 - \frac{1708}{Ra_L} \right]^+ + \left[ \frac{Ra_L^{1/3}}{18} - 1 \right]^+ \quad (Ra_L < 10^8)
+
+    where :math:`[\cdot]^+` sets negative values to zero.
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on plate spacing L [-]
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number based on spacing L, [-]
+
+    Notes
+    -----
+    Recommended for air and data correlates well for moderate Prandtl number
+    liquids (such as water) for :math:`Ra_L < 10^5`.
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-47, p. 554.
+    .. [2] Hollands, K. G. T., T. E. Unny, G. D. Raithby, and L. Konicek.
+       "Free Convective Heat Transfer Across Inclined Air Layers." Journal of
+       Heat Transfer 98 (1976): 189-193.
+    '''
+    if Ra <= 0:
+        return 1.0
+    term1 = 1.44 * max(0.0, 1.0 - 1708.0 / Ra)
+    term2 = max(0.0, (Ra**(1.0/3.0)) / 18.0 - 1.0)
+    return 1.0 + term1 + term2
+
+
+def Nu_inclined_enclosure_Hollands(Ra, theta, H, L):
+    r'''Calculates the Nusselt number for natural convection inside an inclined
+    rectangular enclosure (e.g. flat-plate solar collector) with large aspect
+    ratio :math:`H/L \ge 12`, according to Hollands et al. (1976) and
+    Eq. 9-48 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 1 + 1.44 \left[ 1 - \frac{1708}{Ra_L \cos\theta} \right]^+
+        \left[ 1 - \frac{1708 (\sin 1.8\theta)^{1.6}}{Ra_L \cos\theta} \right]
+        + \left[ \frac{(Ra_L \cos\theta)^{1/3}}{18} - 1 \right]^+
+
+    for :math:`Ra_L \le 10^5`, :math:`0^\circ \le \theta \le 70^\circ`, and :math:`H/L \ge 12`.
+    Here :math:`\theta` is the tilt angle measured from the horizontal.
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on plate spacing L [-]
+    theta : float
+        Tilt angle from the horizontal in degrees [deg] (0 <= theta <= 70)
+    H : float
+        Height (length along incline) of the enclosure, [m]
+    L : float
+        Spacing between the two parallel plates, [m]
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number based on spacing L, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-48, p. 554.
+    '''
+    aspect = H / L
+    if aspect < 12.0 - 1e-9:
+        warnings.warn("Aspect ratio H/L={:.2f} is less than recommended minimum 12 for Hollands inclined correlation.".format(aspect), RuntimeWarning)
+    if theta < 0.0 or theta > 70.0:
+        warnings.warn("Tilt angle theta={:.1f} deg is outside recommended range [0, 70] deg.".format(theta), RuntimeWarning)
+
+    rad_theta = radians(theta)
+    cos_theta = cos(rad_theta)
+    Ra_cos = Ra * cos_theta
+
+    if Ra_cos <= 0:
+        return 1.0
+
+    bracket1 = max(0.0, 1.0 - 1708.0 / Ra_cos)
+    sin_term = sin(1.8 * rad_theta)
+    factor2 = 1.0 - 1708.0 * (max(0.0, sin_term)**1.6) / Ra_cos
+    bracket3 = max(0.0, (Ra_cos**(1.0/3.0)) / 18.0 - 1.0)
+
+    return 1.0 + 1.44 * bracket1 * factor2 + bracket3
+
+
+def critical_angle_inclined_enclosure(aspect_ratio):
+    r'''Determines the critical angle theta_cr (in degrees) for an inclined
+    rectangular enclosure as a function of aspect ratio H/L, based on
+    Table 9-2 in Çengel & Ghajar (5th Ed) [1]_.
+
+    Parameters
+    ----------
+    aspect_ratio : float
+        Aspect ratio H/L of the enclosure [-]
+
+    Returns
+    -------
+    theta_cr : float
+        Critical tilt angle from horizontal, [deg]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Table 9-2, p. 554.
+    .. [2] Catton, I. "Natural Convection in Enclosures." In Proc. 6th Int. Heat
+       Transfer Conf., Vol. 6, pp. 13-31, 1978.
+    '''
+    pts = [(1.0, 25.0), (3.0, 53.0), (6.0, 60.0), (12.0, 67.0)]
+    if aspect_ratio <= 1.0:
+        return 25.0
+    elif aspect_ratio >= 12.0:
+        return 70.0
+    for i in range(len(pts) - 1):
+        x0, y0 = pts[i]
+        x1, y1 = pts[i+1]
+        if x0 <= aspect_ratio <= x1:
+            return y0 + (aspect_ratio - x0) * (y1 - y0) / (x1 - x0)
+    return 70.0
+
+
+def Nu_inclined_enclosure_Catton(Ra, theta, aspect_ratio, Pr=0.71):
+    r'''Calculates the Nusselt number for natural convection inside an inclined
+    rectangular enclosure with small aspect ratio :math:`H/L < 12`, according to
+    Catton (1978), Ayyaswamy & Catton (1973), and Eqs. 9-49, 9-50 in
+    Çengel & Ghajar (5th Ed) [1]_.
+
+    - For :math:`0^\circ < \theta < \theta_{cr}`:
+      .. math::
+          Nu = Nu_0 \left( \frac{Nu_{90}}{Nu_0} \right)^{\theta / \theta_{cr}} (\sin\theta_{cr})^{\theta / (4 \theta_{cr})} \quad \text{[Eq. 9-49]}
+
+    - For :math:`\theta_{cr} \le \theta \le 90^\circ`:
+      .. math::
+          Nu = Nu_{90} (\sin\theta)^{1/4} \quad \text{[Eq. 9-50]}
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on plate spacing L [-]
+    theta : float
+        Tilt angle from horizontal in degrees [deg] (0 <= theta <= 90)
+    aspect_ratio : float
+        Aspect ratio H/L of the enclosure [-]
+    Pr : float, optional
+        Prandtl number of fluid. Default is 0.71 (air) [-]
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number based on spacing L, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eqs. 9-49, 9-50, Table 9-2, p. 554.
+    '''
+    theta_cr = critical_angle_inclined_enclosure(aspect_ratio)
+    Nu_0 = Nu_horizontal_enclosure_Hollands(Ra)
+    Nu_90 = Nu_vertical_enclosure_Cengel(Pr, Ra, aspect_ratio)
+
+    if theta <= 0.0:
+        return Nu_0
+    elif theta >= 90.0:
+        return Nu_90
+
+    rad_theta = radians(theta)
+    rad_theta_cr = radians(theta_cr)
+
+    if theta < theta_cr:
+        ratio = Nu_90 / max(1e-12, Nu_0)
+        exp1 = theta / theta_cr
+        exp2 = theta / (4.0 * theta_cr)
+        return Nu_0 * (ratio**exp1) * (sin(rad_theta_cr)**exp2)
+    else:
+        return Nu_90 * (sin(rad_theta)**0.25)
+
+
+def Nu_inclined_enclosure_Arnold(Nu_vertical, theta):
+    r'''Calculates the Nusselt number for natural convection inside an enclosure
+    tilted more than 90 degrees from the horizontal, according to Arnold et al. (1974)
+    and Eq. 9-51 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 1 + (Nu_{\theta = 90^\circ} - 1) \sin\theta \quad (90^\circ < \theta < 180^\circ)
+
+    Parameters
+    ----------
+    Nu_vertical : float
+        Nusselt number for the corresponding vertical enclosure (theta = 90 deg) [-]
+    theta : float
+        Tilt angle from horizontal in degrees [deg] (90 < theta < 180)
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-51, p. 555.
+    '''
+    rad_theta = radians(theta)
+    return 1.0 + (Nu_vertical - 1.0) * sin(rad_theta)
+
+
+def Nu_vertical_enclosure_Berkovsky_Polevikov_1(Pr, Ra):
+    r'''Calculates Nusselt number for natural convection inside a vertical
+    rectangular enclosure with aspect ratio :math:`1 < H/L < 2`, according to
+    Berkovsky & Polevikov (1977) and Eq. 9-52 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 0.18 \left( \frac{Pr}{0.2 + Pr} Ra_L \right)^{0.29}
+
+    Applicable for any Prandtl number when :math:`Ra_L Pr / (0.2 + Pr) > 10^3`.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Ra : float
+        Rayleigh number based on enclosure width L [-]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number based on spacing L, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-52, p. 555.
+    '''
+    param = (Pr / (0.2 + Pr)) * Ra
+    if param < 1e3:
+        warnings.warn("Ra*Pr/(0.2+Pr)={:.2e} is less than recommended minimum 10^3 for Berkovsky-Polevikov correlation 1.".format(param), RuntimeWarning)
+    if param <= 0:
+        return 1.0
+    return 0.18 * (param**0.29)
+
+
+def Nu_vertical_enclosure_Berkovsky_Polevikov_2(Pr, Ra, aspect_ratio):
+    r'''Calculates Nusselt number for natural convection inside a vertical
+    rectangular enclosure with aspect ratio :math:`2 < H/L < 10`, according to
+    Berkovsky & Polevikov (1977) and Eq. 9-53 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 0.22 \left( \frac{Pr}{0.2 + Pr} Ra_L \right)^{0.28} \left( \frac{H}{L} \right)^{-1/4}
+
+    Applicable for any Prandtl number and :math:`Ra_L < 10^{10}`.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Ra : float
+        Rayleigh number based on enclosure width L [-]
+    aspect_ratio : float
+        Aspect ratio H/L (2 < H/L < 10) [-]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number based on spacing L, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-53, p. 555.
+    '''
+    if Ra > 1e10:
+        warnings.warn("Ra={:.2e} exceeds recommended maximum 10^10 for Berkovsky-Polevikov correlation 2.".format(Ra), RuntimeWarning)
+    param = (Pr / (0.2 + Pr)) * Ra
+    if param <= 0 or aspect_ratio <= 0:
+        return 1.0
+    return 0.22 * (param**0.28) * (aspect_ratio**(-0.25))
+
+
+def Nu_vertical_enclosure_MacGregor_Emery_laminar(Pr, Ra, aspect_ratio):
+    r'''Calculates Nusselt number for laminar natural convection inside a vertical
+    rectangular enclosure with aspect ratio :math:`10 < H/L < 40`, according to
+    MacGregor & Emery (1969) and Eq. 9-54 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 0.42 Ra_L^{1/4} Pr^{0.012} \left( \frac{H}{L} \right)^{-0.3}
+
+    Applicable for :math:`10 < H/L < 40`, :math:`1 < Pr < 2 \times 10^4`, and :math:`10^4 < Ra_L < 10^7`.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Ra : float
+        Rayleigh number based on enclosure width L [-]
+    aspect_ratio : float
+        Aspect ratio H/L (10 < H/L < 40) [-]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number based on spacing L, [-]
+
+    Examples
+    --------
+    Example 9-4 from [1]_:
+    >>> Nu_vertical_enclosure_MacGregor_Emery_laminar(0.7344, 1.050e4, 40.0) # doctest: +ELLIPSIS
+    1.401...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-54, p. 555.
+    '''
+    if Ra <= 0 or aspect_ratio <= 0:
+        return 1.0
+    return 0.42 * (Ra**0.25) * (Pr**0.012) * (aspect_ratio**(-0.3))
+
+
+def Nu_vertical_enclosure_MacGregor_Emery_turbulent(Ra):
+    r'''Calculates Nusselt number for turbulent natural convection inside a vertical
+    rectangular enclosure with aspect ratio :math:`1 < H/L < 40`, according to
+    MacGregor & Emery (1969) and Eq. 9-55 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        Nu = 0.046 Ra_L^{1/3}
+
+    Applicable for :math:`1 < H/L < 40`, :math:`1 < Pr < 20`, and :math:`10^6 < Ra_L < 10^9`.
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on enclosure width L [-]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number based on spacing L, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-55, p. 555.
+    '''
+    if Ra <= 0:
+        return 1.0
+    return 0.046 * (Ra**(1.0/3.0))
+
+
+def Nu_vertical_enclosure_Cengel(Pr, Ra, aspect_ratio):
+    r'''Master selector for natural convection inside a vertical rectangular
+    enclosure, selecting between Berkovsky-Polevikov and MacGregor-Emery
+    correlations based on aspect ratio H/L and Rayleigh number, according to
+    Section 9-5 in Çengel & Ghajar (5th Ed) [1]_.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Ra : float
+        Rayleigh number based on enclosure width L [-]
+    aspect_ratio : float
+        Aspect ratio H/L of the enclosure [-]
+
+    Returns
+    -------
+    Nu : float
+        Average Nusselt number, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Section 9-5, p. 555.
+    '''
+    if aspect_ratio <= 2.0:
+        return Nu_vertical_enclosure_Berkovsky_Polevikov_1(Pr, Ra)
+    elif aspect_ratio <= 10.0:
+        return Nu_vertical_enclosure_Berkovsky_Polevikov_2(Pr, Ra, aspect_ratio)
+    else:
+        if Ra < 1e6:
+            return Nu_vertical_enclosure_MacGregor_Emery_laminar(Pr, Ra, aspect_ratio)
+        else:
+            return Nu_vertical_enclosure_MacGregor_Emery_turbulent(Ra)
+
+
+def F_concentric_cylinders(Di, Do):
+    r'''Calculates geometric factor F_cyl for natural convection in the annular
+    space between two horizontal concentric cylinders, according to
+    Eq. 9-58 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        F_{cyl} = \frac{[\ln(D_o / D_i)]^4}{L_c^3 (D_i^{-3/5} + D_o^{-3/5})^5}
+
+    where :math:`L_c = (D_o - D_i) / 2`.
+
+    Parameters
+    ----------
+    Di : float
+        Inner cylinder diameter, [m]
+    Do : float
+        Outer cylinder diameter, [m]
+
+    Returns
+    -------
+    F_cyl : float
+        Concentric cylinders geometric factor, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-58, p. 556.
+    '''
+    if Do <= Di or Di <= 0:
+        raise ValueError("Outer diameter Do must be strictly greater than inner diameter Di > 0.")
+    Lc = (Do - Di) / 2.0
+    num = (log(Do / Di))**4
+    denom = (Lc**3) * ((Di**(-0.6) + Do**(-0.6))**5)
+    return num / denom
+
+
+def k_eff_concentric_cylinders_Raithby_Hollands(Pr, Ra, Di, Do, k):
+    r'''Calculates effective thermal conductivity for natural convection between
+    horizontal isothermal concentric cylinders, according to Raithby & Hollands (1975)
+    and Eq. 9-57 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        \frac{k_{eff}}{k} = 0.386 \left( \frac{Pr}{0.861 + Pr} \right)^{1/4} (F_{cyl} Ra_L)^{1/4}
+
+    where :math:`L_c = (D_o - D_i) / 2`.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Ra : float
+        Rayleigh number based on gap width Lc = (Do - Di)/2 [-]
+    Di : float
+        Inner cylinder diameter, [m]
+    Do : float
+        Outer cylinder diameter, [m]
+    k : float
+        Actual thermal conductivity of fluid, [W/(m*K)]
+
+    Returns
+    -------
+    k_eff : float
+        Effective thermal conductivity (>= k), [W/(m*K)]
+
+    Notes
+    -----
+    Applicable for :math:`0.70 \le Pr \le 6000` and :math:`10^2 \le F_{cyl} Ra_L \le 10^7`.
+    For :math:`F_{cyl} Ra_L < 100`, natural convection is negligible and :math:`k_{eff} = k`.
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-57, p. 555.
+    '''
+    Fcyl = F_concentric_cylinders(Di, Do)
+    param = Fcyl * Ra
+    if param < 100.0:
+        return k
+    ratio = 0.386 * ((Pr / (0.861 + Pr))**0.25) * (param**0.25)
+    return max(k, k * ratio)
+
+
+def Q_concentric_cylinders_natural(k_eff, Di, Do, Ti, To):
+    r'''Calculates the steady natural convection heat transfer rate per unit
+    length through the annular space between concentric horizontal cylinders,
+    according to Eq. 9-56 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        \dot{Q} = \frac{2 \pi k_{eff}}{\ln(D_o / D_i)} (T_i - T_o) \quad \text{[W/m]}
+
+    Parameters
+    ----------
+    k_eff : float
+        Effective thermal conductivity of the annular fluid, [W/(m*K)]
+    Di : float
+        Inner cylinder diameter, [m]
+    Do : float
+        Outer cylinder diameter, [m]
+    Ti : float
+        Inner cylinder surface temperature, [K] or [deg C]
+    To : float
+        Outer cylinder surface temperature, [K] or [deg C]
+
+    Returns
+    -------
+    Q_per_m : float
+        Heat transfer rate per unit length, [W/m]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-56, p. 555.
+    '''
+    if Do <= Di or Di <= 0:
+        raise ValueError("Outer diameter Do must be strictly greater than inner diameter Di > 0.")
+    return (2.0 * pi * k_eff / log(Do / Di)) * (Ti - To)
+
+
+def F_concentric_spheres(Di, Do):
+    r'''Calculates geometric factor F_sph for natural convection in the space
+    between two concentric spheres, according to Eq. 9-61 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        F_{sph} = \frac{L_c}{(D_i D_o)^4 (D_i^{-7/5} + D_o^{-7/5})^5}
+
+    where :math:`L_c = (D_o - D_i) / 2`.
+
+    Parameters
+    ----------
+    Di : float
+        Inner sphere diameter, [m]
+    Do : float
+        Outer sphere diameter, [m]
+
+    Returns
+    -------
+    F_sph : float
+        Concentric spheres geometric factor, [-]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-61, p. 556.
+    '''
+    if Do <= Di or Di <= 0:
+        raise ValueError("Outer diameter Do must be strictly greater than inner diameter Di > 0.")
+    Lc = (Do - Di) / 2.0
+    num = Lc
+    denom = ((Di * Do)**4) * ((Di**(-1.4) + Do**(-1.4))**5)
+    return num / denom
+
+
+def k_eff_concentric_spheres_Raithby_Hollands(Pr, Ra, Di, Do, k):
+    r'''Calculates effective thermal conductivity for natural convection between
+    isothermal concentric spheres, according to Raithby & Hollands (1975)
+    and Eq. 9-60 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        \frac{k_{eff}}{k} = 0.74 \left( \frac{Pr}{0.861 + Pr} \right)^{1/4} (F_{sph} Ra_L)^{1/4}
+
+    where :math:`L_c = (D_o - D_i) / 2`.
+
+    Parameters
+    ----------
+    Pr : float
+        Prandtl number [-]
+    Ra : float
+        Rayleigh number based on gap width Lc = (Do - Di)/2 [-]
+    Di : float
+        Inner sphere diameter, [m]
+    Do : float
+        Outer sphere diameter, [m]
+    k : float
+        Actual thermal conductivity of fluid, [W/(m*K)]
+
+    Returns
+    -------
+    k_eff : float
+        Effective thermal conductivity (>= k), [W/(m*K)]
+
+    Notes
+    -----
+    Applicable for :math:`0.70 \le Pr \le 4200` and :math:`10^2 \le F_{sph} Ra_L \le 10^4`.
+    If :math:`k_{eff} < k`, :math:`k_{eff} = k`.
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-60, p. 556.
+    '''
+    Fsph = F_concentric_spheres(Di, Do)
+    param = Fsph * Ra
+    ratio = 0.74 * ((Pr / (0.861 + Pr))**0.25) * (param**0.25)
+    return max(k, k * ratio)
+
+
+def Q_concentric_spheres_natural(k_eff, Di, Do, Ti, To):
+    r'''Calculates steady natural convection heat transfer rate through the
+    gap between concentric isothermal spheres, according to Eq. 9-59 in
+    Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        \dot{Q} = k_{eff} \frac{\pi D_i D_o}{L_c} (T_i - T_o) \quad \text{[W]}
+
+    where :math:`L_c = (D_o - D_i) / 2`.
+
+    Parameters
+    ----------
+    k_eff : float
+        Effective thermal conductivity of fluid in the gap, [W/(m*K)]
+    Di : float
+        Inner sphere diameter, [m]
+    Do : float
+        Outer sphere diameter, [m]
+    Ti : float
+        Inner sphere surface temperature, [K] or [deg C]
+    To : float
+        Outer sphere surface temperature, [K] or [deg C]
+
+    Returns
+    -------
+    Q : float
+        Heat transfer rate, [W]
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-59, p. 556.
+    '''
+    if Do <= Di or Di <= 0:
+        raise ValueError("Outer diameter Do must be strictly greater than inner diameter Di > 0.")
+    Lc = (Do - Di) / 2.0
+    return k_eff * pi * Di * Do / Lc * (Ti - To)
+
+
+def emissivity_effective_parallel_plates(eps1, eps2):
+    r'''Calculates effective emissivity between two large parallel plates,
+    according to Eq. 9-65 in Çengel & Ghajar (5th Ed) [1]_.
+
+    .. math::
+        \epsilon_{eff} = \frac{1}{1/\epsilon_1 + 1/\epsilon_2 - 1}
+
+    Parameters
+    ----------
+    eps1 : float
+        Emissivity of plate 1 (0 < eps1 <= 1) [-]
+    eps2 : float
+        Emissivity of plate 2 (0 < eps2 <= 1) [-]
+
+    Returns
+    -------
+    eps_eff : float
+        Effective emissivity between the plates, [-]
+
+    Examples
+    --------
+    Ordinary glass surfaces (eps = 0.84):
+    >>> emissivity_effective_parallel_plates(0.84, 0.84) # doctest: +ELLIPSIS
+    0.7241...
+
+    References
+    ----------
+    .. [1] Çengel, Yunus A., and Afshin J. Ghajar. Heat and Mass Transfer:
+       Fundamentals and Applications. 5th ed. New York: McGraw-Hill, 2015.
+       Eq. 9-65, p. 557.
+    '''
+    if eps1 <= 0 or eps2 <= 0:
+        raise ValueError("Emissivities must be positive.")
+    return 1.0 / (1.0 / eps1 + 1.0 / eps2 - 1.0)
