@@ -272,6 +272,155 @@ def Nu_Nusselt_Rayleigh_Hollands(Pr, Gr, buoyancy=True, Rac=1708):
     Nu = 1.0 + max(0.0, t1)*max(0.0, t2) + max(0.0, t3)*t5
     return Nu
 
+def Nu_rectangular_horizontal_Hollands(Ra, aspect_ratio=None):
+    r"""Calculates the Nusselt number for natural convection inside a horizontal 
+    enclosure formed by two parallel plates of large aspect ratio with the ends capped, heated 
+    from below, using Hollands et al. (1976).
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on the gap distance between plates, [-]
+    aspect_ratio : float, optional
+        Aspect ratio H/L (height/gap ratio), unused in horizontal form 
+        but included for interface consistency, [-]
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number based on gap distance, [-]
+
+    Notes
+    -----
+    Formula:
+        Nu = 1 + 1.44 * [1 - 1708 / Ra]^+ + [(Ra^(1/3) / 18) - 1]^+
+
+    where [x]^+ = max(0.0, x) ensures only positive bracketed terms contribute.
+
+    References
+    ----------
+    .. [1] Hollands, K. G. T. et al. "Free Convective Heat Transfer Across 
+       Inclined Air Layers," J. Heat Transfer, Vol. 98, 1976, pp. 189-193.
+    .. [2] Çengel, Y. A., & Ghajar, A. J. Heat and Mass Transfer (6th ed.).
+    """
+    # Bracket 1: [1 - 1708 / Ra]^+ (Must be positive, turns on when Ra > 1708)
+    bracket1 = max(0.0, 1.0 - (1708.0 / Ra)) if Ra > 0 else 0.0
+
+    # Bracket 2: [(Ra^(1/3) / 18) - 1]^+ (Must be positive, turns on when Ra > 5832)
+    bracket2 = max(0.0, ((Ra ** (1.0 / 3.0)) / 18.0) - 1.0) if Ra > 0 else 0.0
+
+    # Total Nusselt number
+    Nu = 1.0 + (1.44 * bracket1) + bracket2
+
+    return Nu
+
+
+# # =====================================================================
+# # Verification / Example Usage
+# # =====================================================================
+# if __name__ == "__main__":
+#     # Test 1: Below threshold (Ra < 1708) -> Both brackets zero -> Nu = 1.0
+#     print("Ra = 1000  -> Nu =", Nu_enclosure_horizontal_Hollands_1976(1000))
+
+#     # Test 2: Moderate regime (1708 < Ra < 5832) -> Bracket 1 active, Bracket 2 zero
+#     print("Ra = 3000  -> Nu =", Nu_enclosure_horizontal_Hollands_1976(3000))
+
+#     # Test 3: Turbulent regime (Ra > 5832) -> Both brackets active
+#     print("Ra = 4.93e5 -> Nu =", Nu_enclosure_horizontal_Hollands_1976(4.93e5))    
+
+def Nu_InclinedRectangular_Hollands(Ra, Tilt, aspect_ratio=None):
+    r"""Calculates the Nusselt number for natural convection inside a 
+    rectangular enclosure formed by two parallel plates of large aspect 
+    ratio, inclined at an angle `Tilt` with the horizontal, heated from 
+    below, based on the correlation of Hollands et al. (1976).
+
+    Parameters
+    ----------
+    Ra : float
+        Rayleigh number based on the gap distance between plates, [-]
+    Tilt : float
+        Tilt angle of the enclosure with respect to the horizontal, in degrees [°].
+        Valid range: 0° <= Tilt <= 60°
+    aspect_ratio : float, optional
+        Aspect ratio H/L (height/gap ratio), unused in standard 1976 form 
+        but included for interface consistency, [-]
+
+    Returns
+    -------
+    Nu : float
+        Nusselt number based on gap distance, [-]
+
+    Notes
+    -----
+    Formula:
+        Nu = 1 + 1.44 * [1 - 1708 / (Ra * cos(tau))]^* * [1 - 1708 * (sin(1.8*tau))^1.6 / (Ra * cos(tau))]
+               + [(Ra * cos(tau) / 5830)^(1/3) - 1]^*
+
+    where [x]^* = max(0, x).
+
+    For angles 0° <= Tilt <= 60°, this correlation is recommended for 
+    flat-plate solar collectors.
+
+    References
+    ----------
+    .. [1] Hollands, K. G. T., Unny, T. E., Raithby, G. D., and Konicek, L., 
+       "Free Convective Heat Transfer Across Inclined Air Layers," 
+       Journal of Heat Transfer, Vol. 98, No. 2, 1976, pp. 189-193.
+    .. [2] Çengel, Y. A., & Ghajar, A. J. (2020). Heat and Mass Transfer: 
+       Fundamentals and Applications (6th ed.). McGraw-Hill Education. 
+       Equation 9-54.
+    """
+    import math
+    # Convert tilt angle from degrees to radians
+    tau = math.radians(Tilt)
+    
+    # Calculate terms involving trigonometric functions
+    cos_tau = math.cos(tau)
+    sin_1_8_tau = math.sin(1.8 * tau)
+    
+    # Effective Rayleigh number component: Ra * cos(tau)
+    Ra_cos = Ra * cos_tau
+
+    # Term 1: positive-part guard for critical Rayleigh number threshold (1708)
+    if Ra_cos > 0:
+        term1_inner = 1.0 - 1708.0 / Ra_cos
+        term1_bracket = max(0.0, term1_inner)
+    else:
+        term1_bracket = 0.0
+
+    # Term 2: adjustment factor for tilt angle
+    if Ra_cos > 0:
+        term2 = 1.0 - (1708.0 * (sin_1_8_tau ** 1.6)) / Ra_cos
+    else:
+        term2 = 1.0
+
+    # Term 3: high Rayleigh number turbulence factor
+    if Ra_cos > 5830.0:
+        term3_bracket = max(0.0, (Ra_cos / 5830.0) ** (1.0 / 3.0) - 1.0)
+    else:
+        term3_bracket = 0.0
+
+    # Overall Nusselt number assembly
+    Nu = 1.0 + 1.44 * term1_bracket * term2 + term3_bracket
+
+    return Nu
+
+
+# # =====================================================================
+# # Verification / Example Usage
+# # =====================================================================
+# if __name__ == "__main__":
+#     # Test case matching horizontal case (Tilt = 0 deg)
+#     Ra_test = 4.93e5
+#     Tilt_test = 0.0  # Horizontal
+    
+#     Nu_calc = Nu_enclosure_Hollands_1976(Ra_test, Tilt_test)
+#     print(f"Calculated Nu (Tilt = {Tilt_test}°): {Nu_calc:.3f}")
+    
+#     # Test case matching inclined solar collector (Tilt = 45 deg)
+#     Tilt_inclined = 45.0
+#     Nu_inclined = Nu_enclosure_Hollands_1976(Ra_test, Tilt_inclined)
+#     print(f"Calculated Nu (Tilt = {Tilt_inclined}°): {Nu_inclined:.3f}")
 
 def Nu_Nusselt_vertical_Thess(Pr, Gr, H=None, L=None):
     r'''Calculates the Nusselt number for natural convection between two
