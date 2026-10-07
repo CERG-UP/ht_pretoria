@@ -766,27 +766,33 @@ def Gorenflo(P: float, Pc: float, dPdT: float, sigma: float,
     `h0_Gorenflow_1993` (44 fluids) when a CASRN is supplied.
 
     .. math::
-        h = h_0 \cdot F_p \cdot \left(rac{q}{q_0}
+        h = h_0 \cdot F_p \cdot \left(
+rac{q}{q_0}
 ight)^n
             \cdot F_w \cdot F_f
 
     .. math::
-        F_p = 0.7\,{p^*}^{0.2} + 4\,p^* + rac{1.4\,p^*}{1-p^*}
+        F_p = 0.7\,{p^*}^{0.2} + 4\,p^* + 
+rac{1.4\,p^*}{1-p^*}
 
     .. math::
         n = 0.95 - 0.3\,{p^*}^{0.3}
 
     .. math::
         F_w = F_{wR} \cdot F_{wM}
-            = \left(rac{R_a}{R_{a,0}}
+            = \left(
+rac{R_a}{R_{a,0}}
 ight)^{2/15}
-              \cdot \left(rac{b}{b_{Cu}}
+              \cdot \left(
+rac{b}{b_{Cu}}
 ight)^{0.5}
 
     .. math::
-        F_f = \left(rac{P_f}{P_{f,0}}
+        F_f = \left(
+rac{P_f}{P_{f,0}}
 ight)^{0.6}, \quad
-        P_f = rac{(dP_	ext{sat}/dT)}{1000 \cdot \sigma}
+        P_f = 
+rac{(dP_	ext{sat}/dT)}{1000 \cdot \sigma}
 
     Parameters
     ----------
