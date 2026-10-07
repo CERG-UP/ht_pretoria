@@ -9,7 +9,7 @@ import warnings
 
 
 #%% Inputs
-fluid = None #"Water"
+fluid = "Water"
 
 P_abs = 101.325       # kPa
 P_c = 22090.0         # kPa
@@ -25,8 +25,9 @@ dT_e = T_s - T_sat
 
 # Saturation-curve slope and surface tension at the reference reduced
 # pressure p* = 0.1 (not at the operating pressure). Only used to estimate h0
-# for a fluid not in the tables. Water at p* = 0.1 (217.4 C), VDI Heat Atlas
-# Table H2.1. (The Cengel and Ghajar value of 38210 Pa/K is at 100 C.)
+# for a fluid not in the tables. Water at p* = 0.1 is 2.21 MPa, 217.4 C:
+# VDI Heat Atlas Table H2.1 gives 42694 Pa/K there (CoolProp: 42678 Pa/K).
+# 38210 Pa/K (Cengel and Ghajar tables) matches about 210 C, 1.91 MPa (p* = 0.087).
 dp_dT_ref = 38210 # 42694.0   # Pa/K
 dp_dT = dp_dT_ref
 
@@ -390,7 +391,9 @@ print(f" Fp = {Fp:.2f}")
 print(f" F_wr = {F_wr:.2f}")
 print(f" F_wm = {F_wm:.2f}")
 print(f" F_w = {F_w:.2f}")
-print(f" F_f = {F_f:.2f}")
+if use_reference_fluid:
+    # F_f only exists when h0 is estimated with Eq. (8)
+    print(f" F_f = {F_f:.2f}")
 
 print(f"     - Heat Transfer Coeff (h)   = {h_gorenflo:.2f} W/m^2·K")
 print(f"     - Boiling Heat Flux (q'')   = {q_gorenflo:.2f} W/m^2")
