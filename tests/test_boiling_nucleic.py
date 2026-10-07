@@ -20,6 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import warnings
+
 import pytest
 from fluids.numerics import assert_close, assert_close1d
 
@@ -176,42 +178,117 @@ def test_boiling_nucleic_Cooper():
 
 
 def test_Gorenflo():
-    # water case, boiling at 3 bar (approx: dPdT=5201 Pa/K, sigma=0.0577 N/m at 133.5 degC)
-    dPdT_w, sigma_w = 5201., 0.0577
+    # Water at 3 bar uses the water-specific F(p*) and n
     q = 2E4
-    h1 = Gorenflo(P=3E5, Pc=22048320., dPdT=dPdT_w, sigma=sigma_w, q=q, CASRN="7732-18-5")
-    assert_close(h1, 489.18508028484877)
-    Te = q/h1
-    h2 = Gorenflo(P=3E5, Pc=22048320., dPdT=dPdT_w, sigma=sigma_w, Te=Te, CASRN="7732-18-5")
+    h1 = Gorenflo(P=3E5, Pc=22048320., q=q, CASRN="7732-18-5")
+    Pr = 3E5/22048320.
+    Fp = 1.73*Pr**0.27 + (6.1 + 0.68/(1 - Pr))*Pr**2
+    assert_close(h1, 5600.0*Fp)
+    assert_close(h1, 3043.344595525422)
+    h2 = Gorenflo(P=3E5, Pc=22048320., Te=q/h1, CASRN="7732-18-5")
     assert_close(h1, h2)
 
-    # Ethanol case, boiling at 3 bar (approx: dPdT=3800 Pa/K, sigma=0.016 N/m)
-    dPdT_e, sigma_e = 3800., 0.016
-    q = 2E4
-    h1 = Gorenflo(P=3E5, Pc=6137000., dPdT=dPdT_e, sigma=sigma_e, q=q, CASRN="64-17-5")
-    assert_close(h1, 1193.9069487209633)
-    Te = q/h1
-    h2 = Gorenflo(P=3E5, Pc=6137000., dPdT=dPdT_e, sigma=sigma_e, Te=Te, CASRN="64-17-5")
+    # Ethanol at 3 bar; dPdT and sigma do not affect a tabulated fluid
+    h1 = Gorenflo(P=3E5, Pc=6137000., q=q, CASRN="64-17-5")
+    assert_close(h1, 2828.6050440749627)
+    assert_close(h1, Gorenflo(3E5, 6137000., dPdT=3800., sigma=0.016, q=q, CASRN="64-17-5"))
+    h2 = Gorenflo(P=3E5, Pc=6137000., Te=q/h1, CASRN="64-17-5")
     assert_close(h1, h2)
 
-    # Custom h0 case: ethanol conditions with h0=3700
-    h = Gorenflo(3E5, 6137000., dPdT=3800., sigma=0.016, q=2E4, h0=3700.0)
-    assert_close(h, 1015.507059831624)
+    # Custom h0, no CASRN
+    h = Gorenflo(3E5, 6137000., q=2E4, h0=3700.0)
+    Pr = 3E5/6137000.
+    assert_close(h, 3700.0*(0.7*Pr**0.2 + 4.0*Pr + 1.4*Pr/(1.0 - Pr)))
 
-    # R134a, copper wall (default eff), Te-given
-    h = Gorenflo(1E6, 4059280., dPdT=9400., sigma=0.006, Te=2.0, CASRN='811-97-2')
-    assert_close(h, 13874.305281817105)
+    # R134a, copper wall
+    h = Gorenflo(1E6, 4059280., q=2E4, CASRN='811-97-2')
+    assert_close(h, 8282.243199918714)
+    h = Gorenflo(1E6, 4059280., Te=2.0, CASRN='811-97-2')
+    assert_close(h, 4663.248093617287)
+    assert_close(Gorenflo(1E6, 4059280., q=2.0*h, CASRN='811-97-2'), h)
 
-    # Stainless-steel wall (eff=7730) reduces the result
-    h_ss = Gorenflo(1E6, 4059280., dPdT=9400., sigma=0.006, q=2E4, CASRN='811-97-2', eff=7730.)
-    assert_close(h_ss, 5070.245389497731)
+    # Stainless-steel wall reduces the result by (7730/35350)^0.5
+    h_ss = Gorenflo(1E6, 4059280., q=2E4, CASRN='811-97-2', eff=7730.)
+    assert_close(h_ss, 3872.960046980562)
+
+    # At the reference state (p* = 0.1, q0, Ra0, copper) h ~= tabulated h0
+    assert_close(Gorenflo(0.1*4059280., 4059280., q=2E4, CASRN='811-97-2'), 4200.0, rtol=5e-3)
+    assert_close(Gorenflo(0.1*22048320., 22048320., q=2E4, CASRN='7732-18-5'), 5600.0, rtol=5e-3)
+
+    # Helium h0 is tabulated at q0 = 1 kW/m^2 (Table H2.1 footnote i)
+    assert_close(Gorenflo(0.1*227000., 227000., q=1E3, CASRN='7440-59-7'), 2000.0, rtol=5e-3)
 
     with pytest.raises(Exception):
         # CAS number not in the database
-        Gorenflo(3E5, 6137000., dPdT=3800., sigma=0.016, q=2E4, CASRN="6400-17-5")
+        Gorenflo(3E5, 6137000., q=2E4, CASRN="6400-17-5")
     with pytest.raises(Exception):
         # Neither Te nor q provided
-        Gorenflo(3E5, 6137000., dPdT=3800., sigma=0.016, CASRN="64-17-5")
+        Gorenflo(3E5, 6137000., CASRN="64-17-5")
+    with pytest.raises(ValueError):
+        # No way to obtain h0
+        Gorenflo(3E5, 6137000., q=2E4)
+    with pytest.raises(ValueError):
+        # Supercritical
+        Gorenflo(7E6, 6137000., q=2E4, CASRN="64-17-5")
+
+
+def test_Gorenflo_h0_estimate():
+    """Eq. (8): h0 = 3580*P_f^0.6 for fluids not in Table H2.1."""
+    # R134a properties at p* = 0.1 from Table H2.1: P_f = 1.333, alpha_0,calc = 4.26 kW/m^2/K
+    Pc = 4059000.
+    h = Gorenflo(0.1*Pc, Pc, dPdT=13630., sigma=10.226e-3, q=2E4)
+    assert_close(h, 4241.803323721339)
+    Pr = 0.1
+    Fp = 0.7*Pr**0.2 + 4.0*Pr + 1.4*Pr/(1.0 - Pr)
+    assert_close(h/Fp, 4260.0, rtol=2e-3)
+
+    # Reference fluid: P_f = 1 by definition -> h0 = 3580
+    from ht.boiling_nucleic import gorenflo_fluid_aliases, h0_VDI_2e
+    assert_close(h0_VDI_2e["ReferenceFluid"], 3580.0)
+    assert gorenflo_fluid_aliases["ReferenceFluid"] == "reference"
+    Pr = 1e5/1e6
+    Fp = 0.7*Pr**0.2 + 4.0*Pr + 1.4*Pr/(1.0 - Pr)
+    h = Gorenflo(P=1e5, Pc=1e6, q=2e4, fluid='ReferenceFluid')
+    assert_close(h, 3580.0*Fp)
+    assert_close(h, Gorenflo(P=1e5, Pc=1e6, q=2e4, fluid='Reference'))
+    # ...or with P_f supplied, the Eq. (8) estimate
+    h = Gorenflo(P=1e5, Pc=1e6, dPdT=2e4, sigma=0.01, q=2e4, fluid='ReferenceFluid')
+    assert_close(h, 3580.0*2.0**0.6*Fp)
+
+    # A tabulated fluid ignores dPdT and sigma
+    assert_close(Gorenflo(1E6, 4059280., dPdT=1., sigma=1., q=2E4, CASRN='811-97-2'),
+                 Gorenflo(1E6, 4059280., q=2E4, CASRN='811-97-2'))
+
+
+def test_Gorenflo_footnote_warnings():
+    """Table H2.1 footnotes d/e (data quality) warn but do not change h."""
+    from ht.boiling_nucleic import _gorenflo_footnote_d, _gorenflo_footnote_e
+
+    for casrn in ("92-52-4", "71-36-3", "78-83-1", "754-12-1", "75-73-0",
+                  "306-83-2", "7782-44-7", "7440-37-1", "7440-01-9", "1333-74-0"):
+        assert casrn in _gorenflo_footnote_d
+    for casrn in ("71-43-2", "108-88-3", "56-23-5"):
+        assert casrn in _gorenflo_footnote_e
+
+    with pytest.warns(UserWarning, match="footnote d"):
+        h = Gorenflo(P=2E5, Pc=5050000., q=2E4, CASRN="7782-44-7")
+    Pr = 2E5/5050000.
+    assert_close(h, 9500.0*(0.7*Pr**0.2 + 4.0*Pr + 1.4*Pr/(1.0 - Pr)))
+
+    with pytest.warns(UserWarning, match="footnote e"):
+        Gorenflo(P=2E5, Pc=4894000., q=2E4, CASRN="71-43-2")
+
+    # Wall-material correction applies to cryogens too
+    with pytest.warns(UserWarning):
+        h_ss = Gorenflo(P=2E5, Pc=5050000., q=2E4, CASRN="7782-44-7", eff=7730.)
+    assert_close(h_ss/h, (7730./35350.)**0.5)
+
+    # No warning for unflagged fluids, or when h0 is supplied directly
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        Gorenflo(1E6, 4059280., q=2E4, CASRN='811-97-2')
+        Gorenflo(3E5, 22048320., q=2E4, CASRN="7732-18-5")
+        Gorenflo(P=2E5, Pc=5050000., q=2E4, CASRN="7782-44-7", h0=9500.)
 
 
 def test_h_nucleic():
@@ -245,16 +322,16 @@ def test_h_nucleic():
     h = h_nucleic(P=101325., Pc=22048321.0, MW=18.02, Te=4.3, Method="Cooper")
     assert_close(h, 1558.1435442153575)
 
-    # Gorenflo (2010) via h_nucleic — water at 3 bar (dPdT and sigma required)
-    h = h_nucleic(P=3E5, Pc=22048320., dPdT=5201., sigma=0.0577, q=2E4, CAS="7732-18-5", Method="Gorenflo (1993)")
-    assert_close(h, 489.18508028484877)
+    # Gorenflo (2010) via h_nucleic — water at 3 bar
+    h = h_nucleic(P=3E5, Pc=22048320., q=2E4, CAS="7732-18-5", Method="Gorenflo (2010)")
+    assert_close(h, 3043.344595525422)
 
     # Test the kwargs
     h = h_nucleic(rhol=957.854, rhog=0.595593, mul=2.79E-4, kl=0.680, Cpl=4217, Hvap=2.257E6, sigma=0.0589, Te=4.9, Method="Rohsenow", Csf=0.011, n=1.26)
     assert_close(h, 3723.655267067467)
 
 
-    # methods (dPdT and sigma required for Gorenflo to appear in list)
+    # methods (Gorenflo listed when the CAS has a tabulated h0)
     methods = h_nucleic_methods(P=101325., Pc=22048321.0, MW=18.02, dPsat=3906*4.3, dPdT=3906., Tsat=437.5, CAS="7732-18-5", rhol=957.854, rhog=0.595593, mul=2.79E-4, kl=0.680, Cpl=4217, Hvap=2.257E6, sigma=0.0589, Te=4.9)
     assert len(methods) == 10
 
