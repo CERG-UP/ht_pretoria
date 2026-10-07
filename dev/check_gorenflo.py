@@ -350,12 +350,7 @@ else:
 if _casrn_used == "7440-59-7":
     # Helium h0 is given at q0 = 1 kW/m^2 (Table H2.1, footnote i)
     q0 = 1E3
-    
 
-#for my class example, use water relations
-n = 0.9 - 0.3*Pr**0.15
-Fp = 1.73*Pr**0.27 + (6.1 + 0.68/(1.0 - Pr))*Pr*Pr
-    
 #%% Wall correction: surface roughness x wall-material effusivity
 F_wr = (Ra/Ra0)**(2.0/15.0)
 F_wm = (eff/eff_Cu)**0.5

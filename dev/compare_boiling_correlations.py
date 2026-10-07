@@ -121,18 +121,22 @@ def sweep(case, p, q_values=None, Te_values=None):
 
 
 #%% Plot style
-# Categorical slots in fixed order. Montinsky (Mostinski) and HEDH-Taborek are
-# the same family of correlation, so they share a hue and differ by line style.
+# Every correlation has its own colour AND its own line style, so the lines
+# can be told apart in greyscale print and by colour-blind readers.
+# Colours are categorical slots in fixed order; there are eight, so Montinsky
+# (Mostinski) shares HEDH-Taborek's hue as they are the same family of
+# correlation, and is distinguished by its line style.
+# Line styles are (offset, (on, off, ...)) dash patterns in points.
 style = {
-    "Gorenflo (2010)":    dict(color="#2a78d6", linestyle="-"),
-    "Cooper":             dict(color="#eb6834", linestyle="-"),
-    "Stephan-Abdelsalam": dict(color="#1baf7a", linestyle="-"),
-    "Rohsenow":           dict(color="#eda100", linestyle="-"),
-    "Forster-Zuber":      dict(color="#e87ba4", linestyle="-"),
-    "McNelly":            dict(color="#008300", linestyle="-"),
-    "HEDH-Taborek":       dict(color="#4a3aa7", linestyle="-"),
-    "Montinsky":          dict(color="#4a3aa7", linestyle="--"),
-    "Bier":               dict(color="#e34948", linestyle="-"),
+    "Gorenflo (2010)":    dict(color="#2a78d6", linestyle="-"),                       # solid
+    "Cooper":             dict(color="#eb6834", linestyle=(0, (8, 3))),               # long dash
+    "Stephan-Abdelsalam": dict(color="#1baf7a", linestyle=(0, (3, 2))),               # short dash
+    "Rohsenow":           dict(color="#eda100", linestyle=(0, (1, 1.5))),             # dotted
+    "Forster-Zuber":      dict(color="#e87ba4", linestyle=(0, (8, 2, 2, 2))),         # dash-dot
+    "McNelly":            dict(color="#008300", linestyle=(0, (8, 2, 2, 2, 2, 2))),   # dash-dot-dot
+    "HEDH-Taborek":       dict(color="#4a3aa7", linestyle=(0, (12, 2, 4, 2))),        # long-short dash
+    "Montinsky":          dict(color="#4a3aa7", linestyle=(0, (2, 1))),               # dense dash
+    "Bier":               dict(color="#e34948", linestyle=(0, (5, 2, 1, 2, 1, 2, 1, 2))),  # dash-dot-dot-dot
 }
 ink_primary, ink_secondary, ink_muted = "#0b0b0b", "#52514e", "#898781"
 grid_color, axis_color, surface = "#e1e0d9", "#c3c2b7", "#fcfcfb"
@@ -191,8 +195,9 @@ def make_plot(x, results, xlabel, title, log, path,
     for side in ("left", "bottom"):
         ax.spines[side].set_color(axis_color)
     ax.tick_params(colors=ink_muted, which="both")
+    # Long legend swatches so each dash pattern shows clearly
     legend = ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5),
-                       frameon=False, fontsize=9)
+                       frameon=False, fontsize=9, handlelength=4.5)
     for text in legend.get_texts():
         text.set_color(ink_secondary)
     fig.tight_layout()
