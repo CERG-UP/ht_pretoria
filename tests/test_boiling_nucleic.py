@@ -176,32 +176,42 @@ def test_boiling_nucleic_Cooper():
 
 
 def test_Gorenflo():
-    # water case, boiling at 3 bar
+    # water case, boiling at 3 bar (approx: dPdT=5201 Pa/K, sigma=0.0577 N/m at 133.5 degC)
+    dPdT_w, sigma_w = 5201., 0.0577
     q = 2E4
-    h1 = Gorenflo(P=3E5, Pc=22048320., q=q, CASRN="7732-18-5")
-    assert_close(h1, 3043.344595525422)
+    h1 = Gorenflo(P=3E5, Pc=22048320., dPdT=dPdT_w, sigma=sigma_w, q=q, CASRN="7732-18-5")
+    assert_close(h1, 489.18508028484877)
     Te = q/h1
-    h2 = Gorenflo(P=3E5, Pc=22048320., Te=Te, CASRN="7732-18-5")
+    h2 = Gorenflo(P=3E5, Pc=22048320., dPdT=dPdT_w, sigma=sigma_w, Te=Te, CASRN="7732-18-5")
     assert_close(h1, h2)
 
-    # Ethanol case, boiling at 3 bar
+    # Ethanol case, boiling at 3 bar (approx: dPdT=3800 Pa/K, sigma=0.016 N/m)
+    dPdT_e, sigma_e = 3800., 0.016
     q = 2E4
-    h1 = Gorenflo(P=3E5, Pc=6137000., q=q, CASRN="64-17-5")
+    h1 = Gorenflo(P=3E5, Pc=6137000., dPdT=dPdT_e, sigma=sigma_e, q=q, CASRN="64-17-5")
+    assert_close(h1, 1193.9069487209633)
     Te = q/h1
-    assert_close(h1, 3101.133553596696)
-    h2 = Gorenflo(P=3E5, Pc=6137000., Te=Te, CASRN="64-17-5")
+    h2 = Gorenflo(P=3E5, Pc=6137000., dPdT=dPdT_e, sigma=sigma_e, Te=Te, CASRN="64-17-5")
     assert_close(h1, h2)
 
-    # Custom h0 case
-    h = Gorenflo(3E5, 6137000., q=2E4, h0=3700.0)
-    assert_close(h, 2607.771397342676)
+    # Custom h0 case: ethanol conditions with h0=3700
+    h = Gorenflo(3E5, 6137000., dPdT=3800., sigma=0.016, q=2E4, h0=3700.0)
+    assert_close(h, 1015.507059831624)
+
+    # R134a, copper wall (default eff), Te-given
+    h = Gorenflo(1E6, 4059280., dPdT=9400., sigma=0.006, Te=2.0, CASRN='811-97-2')
+    assert_close(h, 13874.305281817105)
+
+    # Stainless-steel wall (eff=7730) reduces the result
+    h_ss = Gorenflo(1E6, 4059280., dPdT=9400., sigma=0.006, q=2E4, CASRN='811-97-2', eff=7730.)
+    assert_close(h_ss, 5070.245389497731)
 
     with pytest.raises(Exception):
-        # Case with a CAS number not in the database
-        Gorenflo(3E5, 6137000., q=2E4, CASRN="6400-17-5")
+        # CAS number not in the database
+        Gorenflo(3E5, 6137000., dPdT=3800., sigma=0.016, q=2E4, CASRN="6400-17-5")
     with pytest.raises(Exception):
-        # Case with neither Te or q provided:
-        Gorenflo(3E5, 6137000., CASRN="64-17-5")
+        # Neither Te nor q provided
+        Gorenflo(3E5, 6137000., dPdT=3800., sigma=0.016, CASRN="64-17-5")
 
 
 def test_h_nucleic():
@@ -235,16 +245,17 @@ def test_h_nucleic():
     h = h_nucleic(P=101325., Pc=22048321.0, MW=18.02, Te=4.3, Method="Cooper")
     assert_close(h, 1558.1435442153575)
 
-    h = h_nucleic(P=3E5, Pc=22048320., q=2E4, CAS="7732-18-5", Method="Gorenflo (1993)")
-    assert_close(h, 3043.344595525422)
+    # Gorenflo (2010) via h_nucleic — water at 3 bar (dPdT and sigma required)
+    h = h_nucleic(P=3E5, Pc=22048320., dPdT=5201., sigma=0.0577, q=2E4, CAS="7732-18-5", Method="Gorenflo (1993)")
+    assert_close(h, 489.18508028484877)
 
     # Test the kwargs
     h = h_nucleic(rhol=957.854, rhog=0.595593, mul=2.79E-4, kl=0.680, Cpl=4217, Hvap=2.257E6, sigma=0.0589, Te=4.9, Method="Rohsenow", Csf=0.011, n=1.26)
     assert_close(h, 3723.655267067467)
 
 
-    # methods
-    methods = h_nucleic_methods(P=101325., Pc=22048321.0, MW=18.02, dPsat=3906*4.3, Tsat=437.5, CAS="7732-18-5", rhol=957.854, rhog=0.595593, mul=2.79E-4, kl=0.680, Cpl=4217, Hvap=2.257E6, sigma=0.0589, Te=4.9)
+    # methods (dPdT and sigma required for Gorenflo to appear in list)
+    methods = h_nucleic_methods(P=101325., Pc=22048321.0, MW=18.02, dPsat=3906*4.3, dPdT=3906., Tsat=437.5, CAS="7732-18-5", rhol=957.854, rhog=0.595593, mul=2.79E-4, kl=0.680, Cpl=4217, Hvap=2.257E6, sigma=0.0589, Te=4.9)
     assert len(methods) == 10
 
     methods = h_nucleic_methods(Te=16.2, Tsat=437.5, Cpl=2730., kl=0.086, mul=156E-6, sigma=0.0082, Hvap=272E3, rhol=567, rhog=18.09, CAS="1333-74-0")

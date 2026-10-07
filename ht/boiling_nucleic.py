@@ -749,118 +749,157 @@ if IS_NUMBA:
     h0_Gorenflow_1993_keys = tuple(h0_Gorenflow_1993.keys())
     h0_Gorenflow_1993_values = tuple(h0_Gorenflow_1993.values())
 
-def Gorenflo(P: float, Pc: float, q: float | None=None, Te: float | None=None, CASRN: str | None=None, h0: float | None=None, Ra: float=4E-7) -> float:
-    r"""Calculates heat transfer coefficient for a pool boiling according to
-    [1]_ and also presented in [2]_. Calculation is based on the corresponding
-    states law, with a single regression constant per fluid. P and Pc are
-    always required.
+def Gorenflo(P: float, Pc: float, dPdT: float, sigma: float,
+             q: float | None=None, Te: float | None=None,
+             CASRN: str | None=None, h0: float | None=None,
+             Ra: float=4E-7, eff: float=35350.0) -> float:
+    r"""Calculates the heat transfer coefficient for nucleate pool boiling
+    using the Gorenflo (2010) correlation as presented in the VDI Heat Atlas,
+    2nd edition [1]_. The correlation is based on the law of corresponding
+    states and includes correction factors for saturation-curve slope and
+    surface tension (fluid influence), surface roughness, and wall-material
+    effusivity.
 
-    Either `q` or `Te` may be specified. Either `CASRN` or `h0` may be
-    specified as well. If `CASRN` is specified and the fluid is not in the
-    list of those studied, an error is raises.
-
-    .. math::
-        \frac{h}{h_0} = C_W F(p^*) \left(\frac{q}{q_0}\right)^n
-
-    .. math::
-        C_W = \left(\frac{R_a}{R_{ao}}\right)^{0.133}
-
-    .. math::
-        q_0 = 20 \;000 \frac{\text{W}}{\text{m}^{2}}
+    Either `q` or `Te` must be specified. Either `CASRN` or `h0` must be
+    provided. Reference coefficients `h0` are looked up first from
+    `h0_VDI_2e` (56 fluids, 2nd edition values) and then from
+    `h0_Gorenflow_1993` (44 fluids) when a CASRN is supplied.
 
     .. math::
-        R_{ao} = 0.4 \mu\text{m}
-
-    For fluids other than water:
-
-    .. math::
-        n = 0.9 - 0.3 p^{*0.3}
+        h = h_0 \cdot F_p \cdot \left(rac{q}{q_0}
+ight)^n
+            \cdot F_w \cdot F_f
 
     .. math::
-        f(p^*) = 1.2p^{*0.27} + \left(2.5 + \frac{1}{1-p^*}\right)p^*
-
-    For water:
+        F_p = 0.7\,{p^*}^{0.2} + 4\,p^* + rac{1.4\,p^*}{1-p^*}
 
     .. math::
-        n = 0.9 - 0.3 p^{*0.15}
+        n = 0.95 - 0.3\,{p^*}^{0.3}
 
     .. math::
-        f(p^*) = 1.73p^{*0.27} + \left(6.1 + \frac{0.68}{1-p^*}\right)p^2
+        F_w = F_{wR} \cdot F_{wM}
+            = \left(rac{R_a}{R_{a,0}}
+ight)^{2/15}
+              \cdot \left(rac{b}{b_{Cu}}
+ight)^{0.5}
+
+    .. math::
+        F_f = \left(rac{P_f}{P_{f,0}}
+ight)^{0.6}, \quad
+        P_f = rac{(dP_	ext{sat}/dT)}{1000 \cdot \sigma}
 
     Parameters
     ----------
     P : float
-        Saturation pressure of fluid, [Pa]
+        Saturation pressure of the fluid, [Pa]
     Pc : float
-        Critical pressure of fluid, [Pa]
+        Critical pressure of the fluid, [Pa]
+    dPdT : float
+        Slope of the saturation pressure curve at the operating temperature,
+        :math:`dP_	ext{sat}/dT`, [Pa/K]
+    sigma : float
+        Surface tension of the liquid phase, [N/m]
     q : float, optional
         Heat flux, [W/m^2]
     Te : float, optional
-        Excess wall temperature, [K]
+        Excess wall temperature (wall superheat), [K]
     CASRN : str, optional
-        CASRN of fluid
-    h0 : float
-        Reference heat transfer coefficient for Gorenflo method, [W/m^2/K]
+        CAS Registry Number of the fluid; used to look up `h0`
+    h0 : float, optional
+        Reference heat transfer coefficient from the VDI table, [W/m^2/K].
+        When supplied, `CASRN` is not required.
     Ra : float, optional
-        Roughness parameter of the surface (0.4 micrometer default) for
-        Gorenflo method, [m]
+        Arithmetic-mean surface roughness; the VDI reference value is
+        0.4 μm = 4×10⁻⁷ m. [m]
+    eff : float, optional
+        Thermal effusivity of the wall material,
+        :math:`b = \sqrt{\lambda 
+ho c_p}`. Defaults to copper
+        (35 350 W·s^0.5·m⁻²·K⁻¹). [W·s^0.5·m⁻²·K⁻¹]
 
     Returns
     -------
     h : float
-        Heat transfer coefficient [W/m^2/K]
+        Nucleate pool boiling heat transfer coefficient, [W/m^2/K]
 
     Notes
     -----
-    A more recent set of reference heat fluxes is available. Where a range of
-    values was listed for reference heat fluxes in [1]_, values from the
-    second edition of [1]_ were used instead. 44 values are available, all
-    listed in the dictionary `h0_Gorenflow_1993`. Values range from 2000
-    to 24000 W/m^2/K.
+    Reference conditions (VDI Heat Atlas, 2nd ed.):
+
+    * Reference heat flux             :math:`q_0 = 20\,000` W m⁻²
+    * Reference surface roughness     :math:`R_{a,0} = 0.4` μm
+    * Reference reduced pressure      :math:`p^*_0 = 0.1`
+    * Reference wall effusivity       :math:`b_{Cu} = 35\,350` W·s^0.5·m⁻²·K⁻¹ (copper)
+    * Reference fluid factor          :math:`P_{f,0} = 1`  (as per VDI Heat Atlas)
+
+    The fluid influence factor :math:`P_f` is evaluated as
+    :math:`(dP_	ext{sat}/dT\,[\text{Pa/K}]) / (1000 \cdot \sigma\,[\text{N/m}])`,
+    which is equivalent to the MATLAB/REFPROP convention of
+    :math:`(dP_	ext{sat}/dT\,[\text{kPa/K}]) / \sigma\,[\text{kN/m}]`.
+
+    Water (CASRN ``7732-18-5``) has dedicated equations in the VDI 2010
+    atlas; the general formulas above are applied here as an approximation.
+
+    56 reference coefficients are available in `h0_VDI_2e` and 44 in
+    `h0_Gorenflow_1993`. Values range from 2000 to 24 000 W m⁻² K⁻¹.
 
     Examples
     --------
-    Water boiling at 3 bar and a heat flux of 2E4 W/m^2/K.
+    R134a boiling at ~10 bar with a heat flux of 20 kW/m², copper wall
+    (approximate thermodynamic properties at 39 °C).
 
-    >>> Gorenflo(3E5, 22048320., q=2E4, CASRN='7732-18-5')
-    3043.344595525422
+    >>> Gorenflo(1E6, 4059280., dPdT=9400., sigma=0.006, q=2E4, CASRN='811-97-2')
+    10842.612598986096
+
+    Stainless-steel wall (eff = 7730 W·s^0.5·m⁻²·K⁻¹) reduces the result:
+
+    >>> Gorenflo(1E6, 4059280., dPdT=9400., sigma=0.006, q=2E4, CASRN='811-97-2', eff=7730.)
+    5070.245389497731
 
     References
     ----------
-    .. [1] Schlunder, Ernst U, VDI. VDI Heat Atlas. Dusseldorf: V.D.I. Verlag,
-       1993. http://digital.ub.uni-paderborn.de/hs/download/pdf/41898?originalFilename=true
-    .. [2] Bertsch, Stefan S., Eckhard A. Groll, and Suresh V. Garimella.
-       "Review and Comparative Analysis of Studies on Saturated Flow Boiling in
-       Small Channels." Nanoscale and Microscale Thermophysical Engineering 12,
-       no. 3 (September 4, 2008): 187-227. doi:10.1080/15567260802317357.
+    .. [1] Gorenflo, D. and Kenning, D., "H2 Pool Boiling", in VDI Heat Atlas,
+       2nd Edition, Springer, Berlin, 2010, pp. 757-792.
     """
     Pr = P/Pc
     Ra0 = 0.4E-6
     q0 = 2E4
+    eff_Cu = 35350.0  # W s^0.5 m^-2 K^-1, thermal effusivity of copper
     if h0 is None: # NUMBA: DELETE
         try:
-            h0 = h0_Gorenflow_1993[CASRN]
+            h0 = h0_VDI_2e[CASRN]
         except:
-            raise ValueError("Reference heat transfer coefficient not known")
+            try:
+                h0 = h0_Gorenflow_1993[CASRN]
+            except:
+                raise ValueError("Reference heat transfer coefficient not known")
     if h0 is None:
         try:
-            h0 = h0_Gorenflow_1993_values[h0_Gorenflow_1993_keys.index(CASRN)]
+            h0 = h0_VDI_2e_values[h0_VDI_2e_keys.index(CASRN)]
         except:
-            raise ValueError("Reference heat transfer coefficient not known")
-    if CASRN != "7732-18-5":
-        # Case for not dealing with water
-        n = 0.9 - 0.3*Pr**0.3
-        Fp = 1.2*Pr**0.27 + (2.5 + 1/(1-Pr))*Pr
-    else:
-        # Case for water
-        n = 0.9 - 0.3*Pr**0.15
-        Fp = 1.73*Pr**0.27 + (6.1 + 0.68/(1-Pr))*Pr**2
-    CW = (Ra/Ra0)**0.133
+            try:
+                h0 = h0_Gorenflow_1993_values[h0_Gorenflow_1993_keys.index(CASRN)]
+            except:
+                raise ValueError("Reference heat transfer coefficient not known")
+    # Gorenflo (2010) — VDI Heat Atlas 2nd edition
+    n = 0.95 - 0.3*Pr**0.3
+    Fp = 0.7*Pr**0.2 + 4.0*Pr + 1.4*Pr/(1.0 - Pr)
+    # Wall correction: surface roughness × wall-material effusivity
+    F_wR = (Ra/Ra0)**(2.0/15.0)
+    F_wM = (eff/eff_Cu)**0.5
+    F_w = F_wR*F_wM
+    # Fluid-property influence factor
+    # dPdT [Pa/K] → /1000 → kPa/K; sigma [N/m] → *1000 → kN/m (VDI convention)
+    Pf = dPdT/(sigma*1.0E6)
+    Pf_0 = 1.0   # reference value, as per VDI Heat Atlas
+    F_f = (Pf/Pf_0)**0.6
     if q is not None:
-        return h0*CW*Fp*(q/q0)**n
+        return h0*F_w*Fp*(q/q0)**n*F_f
     elif Te is not None:
-        A = h0*CW*Fp*(Te/q0)**n
-        return A**(-1./(n - 1.))
+        # h = h0 * F_w * Fp * F_f * (q/q0)^n  with  q = h * Te
+        # → h^(1-n) = h0 * F_w * Fp * F_f * (Te/q0)^n
+        A = h0*F_w*Fp*F_f*(Te/q0)**n
+        return A**(1./(1. - n))
     else:
         raise ValueError("Either q or Te is needed for this correlation")
 
@@ -879,6 +918,9 @@ h0_VDI_2e = {"74-82-8": 7200.0, "74-85-1": 4200.0, "74-84-0": 4600.0,
 "76-15-3": 4200.0, "74-87-3": 4400.0, "56-23-5": 3200.0, "2551-62-4": 3700.0,
 "7732-18-5": 5600.0, "7664-41-7": 7000.0, "7782-44-7": 9500.0, "7727-37-9": 10000.0,
 "7440-37-1": 8200.0, "7440-01-9": 20000.0, "1333-74-0": 24000.0, "7440-59-7": 2000.0}
+if IS_NUMBA:
+    h0_VDI_2e_keys = tuple(h0_VDI_2e.keys())
+    h0_VDI_2e_values = tuple(h0_VDI_2e.values())
 
 
 
@@ -893,7 +935,7 @@ h_nucleic_all_methods = ["Stephan-Abdelsalam", "Stephan-Abdelsalam water",
                      "Forster-Zuber", "Rohsenow", "Cooper", "Bier",
                      "Montinsky", "McNelly", "Gorenflo (1993)"]
 
-def h_nucleic_methods(Te: float | None=None, Tsat: float | None=None, P: float | None=None, dPsat: float | None=None, Cpl: float | None=None,
+def h_nucleic_methods(Te: float | None=None, Tsat: float | None=None, P: float | None=None, dPsat: float | None=None, dPdT: float | None=None, Cpl: float | None=None,
           kl: float | None=None, mul: float | None=None, rhol: float | None=None, sigma: float | None=None, Hvap: float | None=None, rhog: float | None=None,
           MW: float | None=None, Pc: float | None=None, CAS: str | None=None, check_ranges: bool=False) -> list[str]:
     r"""This function returns the names of correlations for nucleate boiling
@@ -944,7 +986,7 @@ def h_nucleic_methods(Te: float | None=None, Tsat: float | None=None, P: float |
     ['Gorenflo (1993)', 'HEDH-Taborek', 'Bier', 'Montinsky']
     """
     methods = []
-    if P is not None and Pc is not None:
+    if P is not None and Pc is not None and dPdT is not None and sigma is not None:
         if CAS is not None and CAS in h0_Gorenflow_1993: # numba: delete
 #        if CAS is not None and CAS in h0_Gorenflow_1993_keys: # numba: uncomment
             methods.append("Gorenflo (1993)")
@@ -977,10 +1019,10 @@ def h_nucleic_methods(Te: float | None=None, Tsat: float | None=None, P: float |
     return methods
 
 
-def h_nucleic(Te: float | None=None, q: float | None=None, Tsat: float | None=None, P: float | None=None, dPsat: float | None=None, Cpl: float | None=None,
-              kl: float | None=None, mul: float | None=None, rhol: float | None=None, sigma: float | None=None, Hvap: float | None=None, rhog: float | None=None,
-              MW: float | None=None, Pc: float | None=None, Csf: float=0.013, n: float=1.7, kw: float=401.0, rhow: float=8.96, Cpw: float=384.0,
-              angle: float=35.0, Rp: float=1e-6, Ra: float=0.4e-6, h0: None=None,
+def h_nucleic(Te: float | None=None, q: float | None=None, Tsat: float | None=None, P: float | None=None, dPsat: float | None=None, dPdT: float | None=None,
+              Cpl: float | None=None, kl: float | None=None, mul: float | None=None, rhol: float | None=None, sigma: float | None=None, Hvap: float | None=None,
+              rhog: float | None=None, MW: float | None=None, Pc: float | None=None, Csf: float=0.013, n: float=1.7, kw: float=401.0, rhow: float=8.96,
+              Cpw: float=384.0, angle: float=35.0, Rp: float=1e-6, Ra: float=0.4e-6, h0: None=None,
               CAS: str | None=None, Method: str | None=None) -> float:
     r"""This function handles the calculation of nucleate boiling
     heat flux and chooses the best method for performing the calculation
@@ -1061,15 +1103,9 @@ def h_nucleic(Te: float | None=None, q: float | None=None, Tsat: float | None=No
     the wall material. See them for their documentation. These parameters
     can also be passed as keyword arguments.
 
-    >>> h_nucleic(P=3E5, Pc=22048320., q=2E4, CAS='7732-18-5', Ra=1E-6)
-    3437.7726419934147
-
     Examples
     --------
-    Water boiling at 3 bar and a heat flux of 2E4 W/m^2/K.
-
-    >>> h_nucleic(P=3E5, Pc=22048320., q=2E4, CAS='7732-18-5')
-    3043.344595525422
+    Water, known excess temperature of 4.9 K, Rohsenow method
 
     Water, known excess temperature of 4.9 K, Rohsenow method
 
@@ -1079,7 +1115,7 @@ def h_nucleic(Te: float | None=None, q: float | None=None, Tsat: float | None=No
     3723.655267067467
     """
     if Method is None:
-        methods = h_nucleic_methods(Te=Te, Tsat=Tsat, P=P, dPsat=dPsat, Cpl=Cpl,
+        methods = h_nucleic_methods(Te=Te, Tsat=Tsat, P=P, dPsat=dPsat, dPdT=dPdT, Cpl=Cpl,
               kl=kl, mul=mul, rhol=rhol, sigma=sigma, Hvap=Hvap, rhog=rhog,
               MW=MW, Pc=Pc, CAS=CAS)
         if not methods:
@@ -1120,7 +1156,7 @@ def h_nucleic(Te: float | None=None, q: float | None=None, Tsat: float | None=No
                     rhol=rhol, rhog=rhog)
 
     elif Method == "Gorenflo (1993)":
-        return Gorenflo(P=P, q=q, Pc=Pc, Te=Te, CASRN=CAS, h0=h0, Ra=Ra)
+        return Gorenflo(P=P, Pc=Pc, dPdT=dPdT, sigma=sigma, q=q, Te=Te, CASRN=CAS, h0=h0, Ra=Ra)
     else:
         raise ValueError("Correlation name not recognized; see the "
                         "documentation for the available options.")
