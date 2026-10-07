@@ -746,23 +746,7 @@ def Cooper(P: float, Pc: float, MW: float, Te: float | None=None, q: float | Non
         raise ValueError("Either q or Te is needed for this correlation")
 
 
-# Old (1993) values, kept as a fallback for fluids not in h0_VDI_2e
-h0_Gorenflow_1993 = {"74-82-8": 7000.0, "74-84-0": 4500.0, "74-98-6": 4000.0,
-"106-97-8": 3600.0, "109-66-0": 3400.0, "78-78-4": 2500.0, "110-54-3": 3300.0,
-"142-82-5": 3200.0, "71-43-2": 2900.0, "108-88-3": 2800.0, "92-52-4": 2100.0,
-"67-56-1": 5400.0, "64-17-5": 4400.0, "71-23-8": 3800.0, "67-63-0": 3000.0,
-"71-36-3": 2600.0, "78-83-1": 4500.0, "67-64-1": 3300.0, "75-69-4": 2800.0,
-"75-71-8": 4000.0, "75-72-9": 3900.0, "75-63-8": 3500.0, "75-45-6": 3900.0,
-"75-46-7": 4400.0, "76-13-1": 2650.0, "76-14-2": 3800.0, "76-15-3": 3200.0,
-"811-97-2": 4500.0, "28987-04-4": 3700.0, "431-89-0": 3800.0, "115-25-3": 4200.0,
-"74-87-3": 4400.0, "56-23-5": 3200.0, "75-73-0": 4750.0, "7732-18-5": 5600.0,
-"7664-41-7": 7000.0, "124-38-9": 5100.0, "2551-62-4": 3700.0, "7782-44-7": 9500.0,
-"7727-37-9": 10000.0, "7440-37-1": 8200.0, "7440-01-9": 20000.0, "1333-74-0": 24000.0,
-"7440-59-7": 2000.0}
-IS_NUMBA = "IS_NUMBA" in globals()
-if IS_NUMBA:
-    h0_Gorenflow_1993_keys = tuple(h0_Gorenflow_1993.keys())
-    h0_Gorenflow_1993_values = tuple(h0_Gorenflow_1993.values())
+#%% Gorenflo
 
 def Gorenflo(P: float, Pc: float, dPdT: float | None=None,
              sigma: float | None=None,
@@ -950,35 +934,33 @@ def Gorenflo(P: float, Pc: float, dPdT: float | None=None,
        "Prediction Methods for Pool Boiling Heat Transfer: A State-of-the-Art
        Review." International Journal of Refrigeration 43 (2014): 203-226.
     """
-    
+    # --- Reference values for horizontal copper tube ---
+    Ra0 = 0.4E-6        # m, surface roughness
+    q0 = 2E4            # W/m^2, heat flux
+    eff_Cu = 35350.0    # W s^0.5 m^-2 K^-1, thermal effusivity of copper
 
-    
-    Pr = P/Pc 
-    if not 0.0 < Pr < 1.0:
-        raise ValueError("Reduced pressure P/Pc must be between 0 and 1")
-    Ra0 = 0.4E-6
-    q0 = 2E4
-    eff_Cu = 35350.0  # W s^0.5 m^-2 K^-1, thermal effusivity of copper
+    # Intermediate calcs
+    Pr = P/Pc
+
+    # --- Reference heat transfer coefficient h0 ---
+    # Was a reference heat transfer coefficient given? If not, use one from the tables
     h0_given = h0 is not None
-    # Resolve CASRN: explicit CASRN takes priority, then fluid name lookup
+
+    # Check if a CASRN was given: explicit CASRN takes priority, then fluid name lookup
     _casrn_used = CASRN
     if _casrn_used is None and fluid is not None:
         _casrn_used = _gorenflo_fluid_aliases_lower.get(fluid.lower())
         if _casrn_used is None:
             raise ValueError("Fluid name '{}' not found in Gorenflo tables. "
                 "See gorenflo_fluid_aliases for valid names, or pass CASRN directly.".format(fluid))
-    # A fluid not in the tables (or the reference fluid) with dPdT and sigma
-    # given gets h0 from Eq. (8) instead of the table lookup.
+
+    # A fluid not in the tables (or the reference fluid) with dPdT and sigma given
+    # gets h0 from Eq. (8) in the "Unlisted fluid" section below, so skip the lookup.
     use_reference_fluid = (h0 is None and dPdT is not None and sigma is not None
                            and (_casrn_used is None or _casrn_used == "reference"))
-    if use_reference_fluid:
-        # Eq. (8): h0 = 3580*F_f, F_f = (P_f/P_f0)^0.6, P_f evaluated at p* = 0.1.
-        # P_f0 = 1 (um K)^-1 = 1 (kPa/K)/(mN/m) = 1E6 (Pa/K)/(N/m)
-        P_f = dPdT/sigma
-        P_f0 = 1E6
-        F_f = (P_f/P_f0)**0.6
-        h0 = 3580.0*F_f
-    if h0 is None: # NUMBA: DELETE
+
+    # Find the relevant tabulated h0, with error checks and warnings
+    if h0 is None and not use_reference_fluid: # NUMBA: DELETE
         if _casrn_used in _h0_VDI_2e_by_casrn:
             h0 = _h0_VDI_2e_by_casrn[_casrn_used]
         elif _casrn_used in h0_Gorenflow_1993:
@@ -988,7 +970,8 @@ def Gorenflo(P: float, Pc: float, dPdT: float | None=None,
                              "tables, dPdT and sigma at p* = 0.1 to estimate h0")
         else:
             raise ValueError("Reference heat transfer coefficient not known for: " + str(_casrn_used))
-    if h0 is None:
+    if h0 is None and not use_reference_fluid:
+        # Lookup used by the numba build, where the dicts above are tuples
         try:
             h0 = _h0_VDI_2e_by_casrn_values[_h0_VDI_2e_by_casrn_keys.index(_casrn_used)]
         except:
@@ -997,26 +980,47 @@ def Gorenflo(P: float, Pc: float, dPdT: float | None=None,
             except:
                 raise ValueError("Reference heat transfer coefficient not known for: " + str(_casrn_used))
     if not h0_given: _gorenflo_data_warning(_casrn_used) # NUMBA: DELETE
+
+    if not 0.0 < Pr < 1.0:
+        raise ValueError("Reduced pressure P/Pc must be between 0 and 1")
+
+    # --- Unlisted fluid: use reference fluid ---
+    # Estimate h0 with Eq. (8), P_f evaluated at p* = 0.1.
+    # P_f in (kPa/K)/(mN/m): dPdT [Pa/K]/1E3 and sigma [N/m]*1E3 -> dPdT/(sigma*1E6),
+    # so the reference value P_f0 = 1 (um K)^-1 is 1E6 in (Pa/K)/(N/m)
+    if use_reference_fluid:
+        P_f = dPdT/sigma
+        P_f0 = 1E6
+        F_f = (P_f/P_f0)**0.6
+        h0 = 3580.0*F_f
+
+    # --- Pressure and heat flux influence ---
     if _casrn_used == "7732-18-5":
         # Water-specific equations, VDI Heat Atlas H2
         n = 0.9 - 0.3*Pr**0.15
         Fp = 1.73*Pr**0.27 + (6.1 + 0.68/(1.0 - Pr))*Pr*Pr
     else:
+        # All other fluids
         n = 0.95 - 0.3*Pr**0.3
         Fp = 0.7*Pr**0.2 + 4.0*Pr + 1.4*Pr/(1.0 - Pr)
     if _casrn_used == "7440-59-7":
         # Helium h0 is given at q0 = 1 kW/m^2 (Table H2.1, footnote i)
         q0 = 1E3
-    # Wall correction: surface roughness x wall-material effusivity
+
+    # --- Wall correction: surface roughness x wall-material effusivity ---
     F_wr = (Ra/Ra0)**(2.0/15.0)
     F_wm = (eff/eff_Cu)**0.5
     F_w = F_wr*F_wm
+
+    # --- HTC calculation ---
     if q is not None:
         h = h0*F_w*Fp*(q/q0)**n
     elif Te is not None:
         # h = h0*F_w*Fp*(q/q0)^n with q = h*Te  ->  h^(1-n) = h0*F_w*Fp*(Te/q0)^n
         A = h0*F_w*Fp*(Te/q0)**n
         h = A**(1./(1. - n))
+        # Solving for h raises every input factor to the power 1/(1-n), so any
+        # error in h0, F_w or F(p*) is amplified. Warn the user how much.
         _gorenflo_Te_warning(n) # NUMBA: DELETE
     else:
         raise ValueError("Either q or Te is needed for this correlation")
@@ -1092,6 +1096,23 @@ _gorenflo_footnote_e = frozenset({
     "56-23-5",   # R10 (carbon tetrachloride)
 })
 
+# Old (1993) values, kept as a fallback for fluids not in h0_VDI_2e
+h0_Gorenflow_1993 = {"74-82-8": 7000.0, "74-84-0": 4500.0, "74-98-6": 4000.0,
+"106-97-8": 3600.0, "109-66-0": 3400.0, "78-78-4": 2500.0, "110-54-3": 3300.0,
+"142-82-5": 3200.0, "71-43-2": 2900.0, "108-88-3": 2800.0, "92-52-4": 2100.0,
+"67-56-1": 5400.0, "64-17-5": 4400.0, "71-23-8": 3800.0, "67-63-0": 3000.0,
+"71-36-3": 2600.0, "78-83-1": 4500.0, "67-64-1": 3300.0, "75-69-4": 2800.0,
+"75-71-8": 4000.0, "75-72-9": 3900.0, "75-63-8": 3500.0, "75-45-6": 3900.0,
+"75-46-7": 4400.0, "76-13-1": 2650.0, "76-14-2": 3800.0, "76-15-3": 3200.0,
+"811-97-2": 4500.0, "28987-04-4": 3700.0, "431-89-0": 3800.0, "115-25-3": 4200.0,
+"74-87-3": 4400.0, "56-23-5": 3200.0, "75-73-0": 4750.0, "7732-18-5": 5600.0,
+"7664-41-7": 7000.0, "124-38-9": 5100.0, "2551-62-4": 3700.0, "7782-44-7": 9500.0,
+"7727-37-9": 10000.0, "7440-37-1": 8200.0, "7440-01-9": 20000.0, "1333-74-0": 24000.0,
+"7440-59-7": 2000.0}
+IS_NUMBA = "IS_NUMBA" in globals()
+if IS_NUMBA:
+    h0_Gorenflow_1993_keys = tuple(h0_Gorenflow_1993.keys())
+    h0_Gorenflow_1993_values = tuple(h0_Gorenflow_1993.values())
 
 def _gorenflo_data_warning(casrn):
     if casrn in _gorenflo_footnote_d:

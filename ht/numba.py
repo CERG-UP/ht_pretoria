@@ -71,7 +71,7 @@ def transform_complete_ht(replaced, __funcs, __all__, normal, vec=False):
     to_change = {}
     to_change.update(dict.fromkeys(to_change_full_output, "full_output"))
 #    to_change['hx.Ntubes_Phadkeb'] = 'square_C1s is None'
-    to_change["boiling_nucleic.Gorenflo"] = "h0 is None: # NUMBA: DELETE"
+    to_change["boiling_nucleic.Gorenflo"] = "h0 is None and not use_reference_fluid: # NUMBA: DELETE"
 
     for s, bad_branch in to_change.items():
         mod, func = s.split(".")
