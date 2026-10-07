@@ -122,7 +122,10 @@ def test_boiling_nucleic_Stephan_Abdelsalam():
 
     cs = ["general", "water", "hydrocarbon", "cryogenic", "refrigerant"]
     h_SA = [Stephan_Abdelsalam(Te=16.2, Tsat=437.5, Cpl=2730., kl=0.086, mul=156E-6, sigma=0.0082, Hvap=272E3, rhol=567, rhog=18.09, correlation=i) for i in cs]
-    h_values = [26722.441071108373, 30571.788078886435, 21009.03422203015, 3548.8050360907037, 84657.98595551957]
+    # Propane-like properties in every variant, so the water value is not
+    # physical; it only checks the formula. X3 = Cpl*Tsat*d^2/alpha^2 here is
+    # 4.4 times X4 = Hvap*d^2/alpha^2.
+    h_values = [26722.441071108373, 9147145.25760636, 21009.03422203015, 15460.943960447508, 84657.98595551957]
     assert_close1d(h_SA, h_values)
 
     h_qs = []
@@ -132,6 +135,20 @@ def test_boiling_nucleic_Stephan_Abdelsalam():
 
     with pytest.raises(Exception):
         Stephan_Abdelsalam(Tsat=437.5, Cpl=2730., kl=0.086, mul=156E-6,  sigma=0.0082, Hvap=272E3, rhol=567.0, rhog=18.09)
+
+    # Water at 100 C, q = 100 kW/m^2: the water variant agrees with the
+    # general variant to within 5% (it was 66% higher when X3 duplicated X4)
+    w = dict(rhol=958.35, rhog=0.5976, mul=2.817e-4, kl=0.6791, Cpl=4215.7, Hvap=2.2565e6, sigma=0.05891)
+    h_water = Stephan_Abdelsalam(Tsat=373.15, q=1E5, correlation="water", **w)
+    h_general = Stephan_Abdelsalam(Tsat=373.15, q=1E5, correlation="general", **w)
+    assert_close(h_water, 8888.501043845223)
+    assert_close(h_water, h_general, rtol=0.06)
+
+    # A supplied angle overrides the automatic one (45 degrees for water)
+    h_45 = Stephan_Abdelsalam(Te=16.2, Tsat=437.5, Cpl=2730., kl=0.086, mul=156E-6, sigma=0.0082, Hvap=272E3, rhol=567, rhog=18.09, correlation="water", angle=45.0)
+    h_35 = Stephan_Abdelsalam(Te=16.2, Tsat=437.5, Cpl=2730., kl=0.086, mul=156E-6, sigma=0.0082, Hvap=272E3, rhol=567, rhog=18.09, correlation="water", angle=35.0)
+    assert_close(h_45, h_values[1])
+    assert_close(h_35, 19232960.16736815)
 
 
 def test_boiling_nucleic_HEDH_Taborek():
@@ -260,6 +277,17 @@ def test_Gorenflo_h0_estimate():
                  Gorenflo(1E6, 4059280., q=2E4, CASRN='811-97-2'))
 
 
+def test_Gorenflo_Te_warning():
+    """Specifying Te warns that input errors are amplified by 1/(1-n)."""
+    # Water at 1 atm: n = 0.766, so 1/(1-n) = 4.3 and 10% -> about 50%
+    with pytest.warns(UserWarning, match=r"1/\(1-n\) = 4\.3.*about a 50% error"):
+        Gorenflo(101325., 22090e3, Te=15.0, CASRN="7732-18-5")
+    # No Te warning when q is given
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        Gorenflo(101325., 22090e3, q=2E4, CASRN="7732-18-5")
+
+
 def test_Gorenflo_footnote_warnings():
     """Table H2.1 footnotes d/e (data quality) warn but do not change h."""
     from ht.boiling_nucleic import _gorenflo_footnote_d, _gorenflo_footnote_e
@@ -308,10 +336,10 @@ def test_h_nucleic():
     assert_close(h, 26722.441071108373)
 
     h = h_nucleic(Te=16.2, Tsat=437.5, Cpl=2730., kl=0.086, mul=156E-6, sigma=0.0082, Hvap=272E3, rhol=567, rhog=18.09, Method="Stephan-Abdelsalam water", CAS="7732-18-5")
-    assert_close(h, 30571.788078886435)
+    assert_close(h, 9147145.25760636)
 
     h = h_nucleic(Te=16.2, Tsat=437.5, Cpl=2730., kl=0.086, mul=156E-6, sigma=0.0082, Hvap=272E3, rhol=567, rhog=18.09, Method="Stephan-Abdelsalam cryogenic", CAS="1333-74-0")
-    assert_close(h, 3548.8050360907037)
+    assert_close(h, 15460.943960447508)
 
     h = h_nucleic(Te=16.2, P=310.3E3, Pc=2550E3, Method="HEDH-Taborek")
     assert_close(h, 1397.272486525486)

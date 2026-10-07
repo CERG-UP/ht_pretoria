@@ -5,12 +5,11 @@ Created on Wed Oct  7 16:29:23 2026
 @author: Work at Home
 """
 
-import CoolProp.CoolProp  as CP
 import warnings
 
 
 #%% Inputs
-fluid = 'water'
+fluid = None #"Water"
 
 P_abs = 101.325       # kPa
 P_c = 22090.0         # kPa
@@ -18,243 +17,38 @@ P_c = 22090.0         # kPa
 # Given Parameters
 T_s = 115.0 + 273.15          # C (Initial bearing temperature)
 T_sat = 100.0  + 273.15       # C (Saturated water pool at 1 atm)
-g = 9.81              # m/s^2 (Gravitational acceleration)
-R_a = 0.1             # um (Surface roughness)
+R_a = 0.1e-6          # m (Surface roughness, 0.1 um)
 
 # Excess Temperature
 dT_e = T_s - T_sat
 
 
-# # --- Method B: Central Finite Difference Verification ---
-dT = 1e-4  # K
-p_plus = CP.PropsSI("P", "T", T_sat + dT, "Q", 1, fluid)
-p_minus = CP.PropsSI("P", "T", T_sat - dT, "Q", 1, fluid)
-dp_dT_numeric = (p_plus - p_minus) / (2 * dT)
-dp_dT_CG = 38210 #Pa.K #Cengel and Ghajara tables
-dp_dT = dp_dT_CG
+# Saturation-curve slope and surface tension at the reference reduced
+# pressure p* = 0.1 (not at the operating pressure). Only used to estimate h0
+# for a fluid not in the tables. Water at p* = 0.1 (217.4 C), VDI Heat Atlas
+# Table H2.1. (The Cengel and Ghajar value of 38210 Pa/K is at 100 C.)
+dp_dT_ref = 38210 # 42694.0   # Pa/K
+dp_dT = dp_dT_ref
 
-sigma_ref = 0.03367
+sigma_ref = 0.03367   # N/m
 
-e_cu = 35.35
-e_ss = 8.45
+e_cu = 35350.0        # W s^0.5/m^2/K (copper effusivity; stainless steel ~8450)
+e_ss = 8450
 #%% Conversion
 P = P_abs
 Pc = P_c
 
-dPdT = dp_dT,
+dPdT = dp_dT
+
 sigma = sigma_ref
 q= None
 Te = dT_e
 h0 = None
 CASRN=None
-fluid=None,
+# fluid is set in Inputs
 Ra = R_a
-eff = e_cu
+eff = e_ss
 #              return_CASRN: bool=False
-
-
-#%% Preamble
-
-h0_Gorenflow_1993 = {"74-82-8": 7000.0, "74-84-0": 4500.0, "74-98-6": 4000.0,
-"106-97-8": 3600.0, "109-66-0": 3400.0, "78-78-4": 2500.0, "110-54-3": 3300.0,
-"142-82-5": 3200.0, "71-43-2": 2900.0, "108-88-3": 2800.0, "92-52-4": 2100.0,
-"67-56-1": 5400.0, "64-17-5": 4400.0, "71-23-8": 3800.0, "67-63-0": 3000.0,
-"71-36-3": 2600.0, "78-83-1": 4500.0, "67-64-1": 3300.0, "75-69-4": 2800.0,
-"75-71-8": 4000.0, "75-72-9": 3900.0, "75-63-8": 3500.0, "75-45-6": 3900.0,
-"75-46-7": 4400.0, "76-13-1": 2650.0, "76-14-2": 3800.0, "76-15-3": 3200.0,
-"811-97-2": 4500.0, "28987-04-4": 3700.0, "431-89-0": 3800.0, "115-25-3": 4200.0,
-"74-87-3": 4400.0, "56-23-5": 3200.0, "75-73-0": 4750.0, "7732-18-5": 5600.0,
-"7664-41-7": 7000.0, "124-38-9": 5100.0, "2551-62-4": 3700.0, "7782-44-7": 9500.0,
-"7727-37-9": 10000.0, "7440-37-1": 8200.0, "7440-01-9": 20000.0, "1333-74-0": 24000.0,
-"7440-59-7": 2000.0}
-IS_NUMBA = "IS_NUMBA" in globals()
-if IS_NUMBA:
-    h0_Gorenflow_1993_keys = tuple(h0_Gorenflow_1993.keys())
-    h0_Gorenflow_1993_values = tuple(h0_Gorenflow_1993.values())
-
-# def Gorenflo(P: float, Pc: float, dPdT: float | None=None,
-#              sigma: float | None=None,
-#              q: float | None=None, Te: float | None=None,
-#              CASRN: str | None=None, fluid: str | None=None,
-#              h0: float | None=None,
-#              Ra: float=4E-7, eff: float=35350.0,
-#              return_CASRN: bool=False):
-r"""Calculates the heat transfer coefficient for nucleate pool boiling
-using the Gorenflo (2010) correlation as presented in the VDI Heat Atlas,
-2nd edition [1]_. The correlation is based on the law of corresponding
-states, with a single fluid-specific reference heat transfer coefficient
-:math:`h_0` and correction factors for reduced pressure, heat flux,
-surface roughness and wall material.
-
-Either `q` or `Te` must be specified. The reference coefficient `h0` is
-taken from, in order of priority:
-
-1. the `h0` argument;
-2. the VDI 2nd-edition table `h0_VDI_2e` (looked up by `CASRN` or `fluid`);
-3. the 1993 table `h0_Gorenflow_1993`;
-4. Eq. (8) of [1]_, :math:`h_0 = 3580 P_f^{0.6}`, when no fluid is
-   identified (or ``fluid='ReferenceFluid'``) and `dPdT` and `sigma`
-   are supplied.
-
-.. math::
-    h = h_0 \cdot F(p^*) \cdot \left(\frac{q}{q_0}\right)^n \cdot F_W
-
-For all fluids except water:
-
-.. math::
-    F(p^*) = 0.7\,{p^*}^{0.2} + 4\,p^* + \frac{1.4\,p^*}{1-p^*}
-
-.. math::
-    n = 0.95 - 0.3\,{p^*}^{0.3}
-
-For water:
-
-.. math::
-    F(p^*) = 1.73\,{p^*}^{0.27}
-        + \left(6.1 + \frac{0.68}{1-p^*}\right){p^*}^2
-
-.. math::
-    n = 0.9 - 0.3\,{p^*}^{0.15}
-
-Wall correction for surface roughness and wall material:
-
-.. math::
-    F_W = \left(\frac{R_a}{R_{a,0}}\right)^{2/15}
-        \left(\frac{b}{b_{Cu}}\right)^{0.5}
-
-Estimate of the reference coefficient for fluids not in the table:
-
-.. math::
-    h_0 = 3580 \cdot P_f^{0.6}, \quad
-    P_f = \left.\frac{(dP_{sat}/dT)\,[\text{kPa/K}]}
-        {\sigma\,[\text{mN/m}]}\right|_{p^* = 0.1}
-
-Parameters
-----------
-P : float
-    Saturation pressure of the fluid, [Pa]
-Pc : float
-    Critical pressure of the fluid, [Pa]
-dPdT : float, optional
-    Slope of the saturation pressure curve, :math:`dP_{sat}/dT`,
-    evaluated at the reference reduced pressure :math:`p^* = 0.1`
-    (not at the operating pressure). Only used to estimate `h0` for
-    fluids not in the tables, [Pa/K]
-sigma : float, optional
-    Surface tension of the liquid at :math:`p^* = 0.1`. Only used to
-    estimate `h0` for fluids not in the tables, [N/m]
-q : float, optional
-    Heat flux, [W/m^2]
-Te : float, optional
-    Excess wall temperature (wall superheat), [K]
-CASRN : str, optional
-    CAS Registry Number of the fluid; used to look up `h0` and to select
-    the water-specific equations. Takes priority over `fluid`, [-]
-fluid : str, optional
-    Fluid name, case-insensitive; see `gorenflo_fluid_aliases` for the
-    recognised names, [-]
-h0 : float, optional
-    Reference heat transfer coefficient at :math:`p^* = 0.1`,
-    :math:`q_0` and :math:`R_{a,0}`, [W/m^2/K]
-Ra : float, optional
-    Arithmetic-mean surface roughness; the VDI reference value is
-    0.4 μm, [m]
-eff : float, optional
-    Thermal effusivity of the wall material,
-    :math:`b = \sqrt{k \rho c_p}`. Defaults to copper,
-    [W*s^0.5/m^2/K]
-return_CASRN : bool, optional
-    If True, return a ``(h, CASRN)`` tuple instead of just ``h``, [-]
-
-Returns
--------
-h : float
-    Nucleate pool boiling heat transfer coefficient, [W/m^2/K]
-CASRN : str or None
-    CAS Registry Number used for the `h0` lookup; only returned when
-    ``return_CASRN=True``. ``None`` if no fluid was identified, [-]
-
-Notes
------
-Reference conditions (VDI Heat Atlas, 2nd ed., Table H2.1):
-
-* Reference heat flux             :math:`q_0 = 20\,000` W/m² (1000 W/m²
-  for helium, which does not pool boil at 20 kW/m²; table footnote i)
-* Reference surface roughness     :math:`R_{a,0} = 0.4` μm
-* Reference reduced pressure      :math:`p^*_0 = 0.1`
-* Reference wall effusivity       :math:`b_{Cu} = 35\,350` W s^0.5/m²/K
-
-The fluid parameter :math:`P_f` is used only to *estimate* :math:`h_0`
-(the :math:`\alpha_{0,calc}` column of Table H2.1); it is not applied to
-tabulated :math:`h_0` values, which already contain the fluid's
-properties.
-
-The water equations are selected only when the fluid is identified as
-water through `CASRN` or `fluid`; if `h0` is supplied directly for water,
-also pass ``CASRN='7732-18-5'``.
-
-A `UserWarning` is issued for fluids whose tabulated :math:`h_0` is
-flagged in Table H2.1 as based on very few experimental data
-(footnote d) or on data with very high scatter (footnote e).
-
-Examples
---------
-R134a boiling at 10 bar with a heat flux of 20 kW/m², copper wall:
-
->>> Gorenflo(1E6, 4059280., q=2E4, CASRN='811-97-2')
-8282.243199918714
-
-Stainless-steel wall (eff = 7730 W s^0.5/m²/K) reduces the result:
-
->>> Gorenflo(1E6, 4059280., q=2E4, CASRN='811-97-2', eff=7730.)
-3872.960046980562
-
-A fluid not in the tables: estimate `h0` from the saturation-curve slope
-and surface tension at :math:`p^* = 0.1` (R134a properties used here, for
-which Table H2.1 lists :math:`\alpha_{0,calc} = 4.26` kW/m²/K):
-
->>> Gorenflo(0.1*4059280., 4059280., dPdT=13630., sigma=10.226e-3, q=2E4)
-4241.803323721339
-
-The following examples verify the implementation against [2]_, in which
-the author of [1]_ works through the method. They are given in kW/m²/K.
-
-Fig. 1 of [2]_ shows i-Butane (:math:`p_c` = 36.29 bar,
-:math:`\alpha_0` = 3.7 kW/m²/K) boiling at :math:`q_0` for several reduced
-pressures. The values read from the log-scale plot are about 0.87, 1.9,
-8.7 and 25 kW/m²/K at :math:`p^*` = 0.003, 0.03, 0.3 and 0.7; these match
-to within 0.6%, the precision of reading the graph:
-
->>> Pc = 36.29e5
->>> [round(Gorenflo(p*Pc, Pc, q=2E4, CASRN='75-28-5')/1000, 2)
-...  for p in (0.003, 0.03, 0.3, 0.7)]
-[0.87, 1.89, 8.7, 24.86]
-
-Eq. (6) of [2]_ (Eq. (8) of [1]_) gives :math:`\alpha_0` = 3.76 kW/m²/K for
-R236fa (:math:`P_f` = 1.087 (μm K)⁻¹) and 2.28 kW/m²/K for hexadecane
-(:math:`P_f` = 0.47 (μm K)⁻¹). Here `dPdT` and `sigma` are chosen to give
-those :math:`P_f` values; the results match after allowing for
-:math:`F(p^* = 0.1)` = 0.997. The :math:`\alpha_{0,calc}` column of
-Table H2.1 in [1]_ (e.g. 7.13 for methane, 4.26 for R134a, 3.87 for
-R1234yf) is matched in the same way to within 0.2%:
-
->>> round(Gorenflo(0.1*Pc, Pc, dPdT=10870., sigma=0.01, q=2E4)/1000, 2)
-3.75
->>> round(Gorenflo(0.1*Pc, Pc, dPdT=4700., sigma=0.01, q=2E4)/1000, 2)
-2.27
-
-References
-----------
-.. [1] Gorenflo, D. and Kenning, D., "H2 Pool Boiling", in VDI Heat Atlas,
-   2nd Edition, Springer, Berlin, 2010, pp. 757-792.
-.. [2] Gorenflo, D., Baumhögger, E., Herres, G. and Kotthoff, S.,
-   "Prediction Methods for Pool Boiling Heat Transfer: A State-of-the-Art
-   Review." International Journal of Refrigeration 43 (2014): 203-226.
-"""
-
-
-
-
 
 #%% Reference values for horizontal copper tube
 Ra0 = 0.4E-6    #m - Roughness
@@ -334,6 +128,21 @@ _gorenflo_footnote_e = frozenset({
 "108-88-3",  # Toluene
 "56-23-5",   # R10 (carbon tetrachloride)
 })
+
+#Old values, kept as backup in case they are needed
+h0_Gorenflow_1993 = {"74-82-8": 7000.0, "74-84-0": 4500.0, "74-98-6": 4000.0,
+"106-97-8": 3600.0, "109-66-0": 3400.0, "78-78-4": 2500.0, "110-54-3": 3300.0,
+"142-82-5": 3200.0, "71-43-2": 2900.0, "108-88-3": 2800.0, "92-52-4": 2100.0,
+"67-56-1": 5400.0, "64-17-5": 4400.0, "71-23-8": 3800.0, "67-63-0": 3000.0,
+"71-36-3": 2600.0, "78-83-1": 4500.0, "67-64-1": 3300.0, "75-69-4": 2800.0,
+"75-71-8": 4000.0, "75-72-9": 3900.0, "75-63-8": 3500.0, "75-45-6": 3900.0,
+"75-46-7": 4400.0, "76-13-1": 2650.0, "76-14-2": 3800.0, "76-15-3": 3200.0,
+"811-97-2": 4500.0, "28987-04-4": 3700.0, "431-89-0": 3800.0, "115-25-3": 4200.0,
+"74-87-3": 4400.0, "56-23-5": 3200.0, "75-73-0": 4750.0, "7732-18-5": 5600.0,
+"7664-41-7": 7000.0, "124-38-9": 5100.0, "2551-62-4": 3700.0, "7782-44-7": 9500.0,
+"7727-37-9": 10000.0, "7440-37-1": 8200.0, "7440-01-9": 20000.0, "1333-74-0": 24000.0,
+"7440-59-7": 2000.0}
+
 
 # ---------------------------------------------------------------------------
 # Fluid name → CASRN lookup for Gorenflo().
@@ -463,12 +272,6 @@ gorenflo_casrn_to_name = {
 'reference': 'ReferenceFluid',
 }
 
-cryogenics = {"132259-10-0": "Air", "7440-37-1": "Argon", "630-08-0":
-"carbon monoxide", "7782-39-0": "deuterium", "7782-41-4": "fluorine",
-"7440-59-7": "helium", "1333-74-0": "hydrogen", "7439-90-9": "krypton",
-"74-82-8": "methane", "7440-01-9": "neon", "7727-37-9": "nitrogen",
-"7782-44-7": "oxygen", "7440-63-3": "xenon"}
-
 #%% Find relavent HTC, with error checks and warnings
 def _gorenflo_data_warning(casrn):
     if casrn in _gorenflo_footnote_d:
@@ -488,9 +291,6 @@ def _gorenflo_data_warning(casrn):
 _h0_VDI_2e_by_casrn = {casrn: h0_VDI_2e[name]
                         for casrn, name in gorenflo_casrn_to_name.items()
                         if name in h0_VDI_2e}
-if IS_NUMBA:
-    _h0_VDI_2e_by_casrn_keys = tuple(_h0_VDI_2e_by_casrn.keys())
-    _h0_VDI_2e_by_casrn_values = tuple(_h0_VDI_2e_by_casrn.values())
 
 # Internal lowercase lookup used inside Gorenflo() for case-insensitive matching
 _gorenflo_fluid_aliases_lower = {k.lower(): v for k, v in gorenflo_fluid_aliases.items()}
@@ -504,7 +304,12 @@ if _casrn_used is None and fluid is not None:
         raise ValueError("Fluid name '{}' not found in Gorenflo tables. "
             "See gorenflo_fluid_aliases for valid names, or pass CASRN directly.".format(fluid))
 
-if h0 is None: # NUMBA: DELETE
+# A fluid not in the tables (or the reference fluid) with dPdT and sigma given
+# gets h0 from Eq. (8) in the "Unlisted fluid" cell below, so skip the lookup.
+use_reference_fluid = (h0 is None and dPdT is not None and sigma is not None
+                       and (_casrn_used is None or _casrn_used == "reference"))
+
+if h0 is None and not use_reference_fluid:
     if _casrn_used in _h0_VDI_2e_by_casrn:
         h0 = _h0_VDI_2e_by_casrn[_casrn_used]
     elif _casrn_used in h0_Gorenflow_1993:
@@ -514,15 +319,7 @@ if h0 is None: # NUMBA: DELETE
                          "tables, dPdT and sigma at p* = 0.1 to estimate h0")
     else:
         raise ValueError("Reference heat transfer coefficient not known for: " + str(_casrn_used))
-if h0 is None:
-    try:
-        h0 = _h0_VDI_2e_by_casrn_values[_h0_VDI_2e_by_casrn_keys.index(_casrn_used)]
-    except:
-        try:
-            h0 = h0_Gorenflow_1993_values[h0_Gorenflow_1993_keys.index(_casrn_used)]
-        except:
-            raise ValueError("Reference heat transfer coefficient not known for: " + str(_casrn_used))
-if not h0_given: _gorenflo_data_warning(_casrn_used) # NUMBA: DELETE
+if not h0_given: _gorenflo_data_warning(_casrn_used)
 
 
 
@@ -534,11 +331,11 @@ if not 0.0 < Pr < 1.0:
 #%% Unlisted fluid - use reference fluid
 # estimate h0 with Eq. (8), P_f evaluated at p* = 0.1.
 # P_f in (kPa/K)/(mN/m): dPdT [Pa/K]/1E3 and sigma [N/m]*1E3 -> dPdT/(sigma*1E6)
-if (h0 is None and dPdT is not None and sigma is not None
-        and (_casrn_used is None or _casrn_used == "reference")):
+if use_reference_fluid:
     P_f = dPdT/sigma
     P_f0 = 1e6
-    h0 = 3580.0*(P_f/P_f0)**0.6
+    F_f = (P_f/P_f0)**0.6
+    h0 = 3580.0* F_f
 
 #%% Pressure and Heat Flux Influence
 
@@ -554,6 +351,10 @@ if _casrn_used == "7440-59-7":
     # Helium h0 is given at q0 = 1 kW/m^2 (Table H2.1, footnote i)
     q0 = 1E3
     
+
+#for my class example, use water relations
+n = 0.9 - 0.3*Pr**0.15
+Fp = 1.73*Pr**0.27 + (6.1 + 0.68/(1.0 - Pr))*Pr*Pr
     
 #%% Wall correction: surface roughness x wall-material effusivity
 F_wr = (Ra/Ra0)**(2.0/15.0)
@@ -567,41 +368,34 @@ elif Te is not None:
     # h = h0*F_w*Fp*(q/q0)^n with q = h*Te  ->  h^(1-n) = h0*F_w*Fp*(Te/q0)^n
     A = h0*F_w*Fp*(Te/q0)**n
     h = A**(1./(1. - n))
+    # Solving for h raises every input factor to the power 1/(1-n), so any
+    # error in h0, F_w or F(p*) is amplified. Warn the user how much.
+    amplification = 1./(1. - n)
+    warnings.warn(
+        "Gorenflo with specified Te: h scales with h0*F_w*F(p*) raised to "
+        "1/(1-n) = {:.1f}, so a 10% error in h0, F_w or F(p*) gives about a "
+        "{:.0f}% error in h (and in q = h*Te). Specify q instead of Te where "
+        "possible.".format(amplification, 100*(1.1**amplification - 1)),
+        UserWarning)
 else:
     raise ValueError("Either q or Te is needed for this correlation")
 
 print(f" h = {h:.2f}")
 
 
-
-
-
-
-
-
-
-
-
-
-
 #%% Test of the file
 
+h_gorenflo = h
+q_gorenflo = q if q is not None else h*Te
+
 print("\n  3. Gorenflo's Relation:")
+print(f" h0 = {h0:.0f} W/m^2·K ({'Eq. (8) estimate' if use_reference_fluid else 'tabulated or given'})")
+print(f" n = {n:.3f}")
 print(f" Fp = {Fp:.2f}")
-print(f" F_wr = {Fwr:.2f}")
-print(f" F_wm = {Fwm:.2f}")
+print(f" F_wr = {F_wr:.2f}")
+print(f" F_wm = {F_wm:.2f}")
 print(f" F_w = {F_w:.2f}")
 print(f" F_f = {F_f:.2f}")
 
 print(f"     - Heat Transfer Coeff (h)   = {h_gorenflo:.2f} W/m^2·K")
-print(f"     - Boiling Heat Flux (q'')   = {q_gorenflo/1e3:.2f} kW/m^2")
-print(f"     - Heat Rate Removed (Q)     = {Q_gorenflo:.2f} W ({Q_gorenflo/1e3:.3f} kW)")
-
-print(f"     - Heat Transfer Coeff (h) ht_expvalue  = {h_gorenflo_ht_expvalue:.2f} W/m^2·K")
-print(f"     - Boiling Heat Flux (q'') ht_expvalue  = {q_gorenflo_ht_expvalue/1e3:.2f} kW/m^2")
-
-print(f"     - Heat Transfer Coeff (h) ht_reffluid  = {h_gorenflo_ht_reffluid:.2f} W/m^2·K")
-print(f"     - Boiling Heat Flux (q'') ht_reffluid  = {q_gorenflo_ht_reffluid/1e3:.2f} kW/m^2")
-
-print(f"\n  Critical Heat Flux (q_max)     = {q_max/1e3:.2f} kW/m^2")
-print(f"  Operating % of CHF (Rohsenow)  = {(q_rohsenow/q_max)*100:.2f}%")
+print(f"     - Boiling Heat Flux (q'')   = {q_gorenflo:.2f} W/m^2")

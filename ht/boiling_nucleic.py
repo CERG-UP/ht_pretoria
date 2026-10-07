@@ -370,7 +370,7 @@ def Stephan_Abdelsalam(rhol: float, rhog: float, mul: float, kl: float, Cpl: flo
     not shown here, but are similar to those of the other functions.
 
     .. math::
-        h = 0.23X_1^{0.674} X_2^{0.35} X_3^{0.371} X_5^{0.297} X_8^{-1.73} k_L/d_B
+        h = 0.23X_1^{0.674} X_2^{0.35} X_4^{0.371} X_5^{0.297} X_8^{-1.73} k_L/d_B
 
     .. math::
         X1 = \frac{q D_d}{K_L T_{sat}}
@@ -431,7 +431,7 @@ def Stephan_Abdelsalam(rhol: float, rhog: float, mul: float, kl: float, Cpl: flo
     sigma : float
         Surface tension of liquid [N/m]
     Tsat : float
-        Saturation temperature at operating pressure [Pa]
+        Saturation temperature at operating pressure [K]
     Te : float, optional
         Excess wall temperature, [K]
     q : float, optional
@@ -457,10 +457,12 @@ def Stephan_Abdelsalam(rhol: float, rhog: float, mul: float, kl: float, Cpl: flo
     If cryogenic correlation is selected, metal properties are used. Default
     values are the properties of copper at STP.
 
-    The angle is selected automatically if a correlation is selected; if angle
-    is provided anyway, the automatic selection is ignored. A IndexError
-    exception is raised if the correlation is not in the dictionary
-    _angles_Stephan_Abdelsalam.
+    The angle is selected automatically from the correlation (45° for water,
+    1° for cryogenic fluids, 35° otherwise) unless `angle` is provided.
+
+    The 'general' and 'hydrocarbon' forms use the latent-heat group
+    :math:`X_4 = H_{vap} D_d^2/\alpha^2`, as reproduced in [4]_ and [5]_.
+    The 'water' and 'cryogenic' forms use both :math:`X_3` and :math:`X_4`.
 
     Examples
     --------
@@ -480,16 +482,25 @@ def Stephan_Abdelsalam(rhol: float, rhog: float, mul: float, kl: float, Cpl: flo
        doi:10.1016/0017-9310(80)90140-4.
     .. [3] Serth, R. W., Process Heat Transfer: Principles,
        Applications and Rules of Thumb. 2E. Amsterdam: Academic Press, 2014.
+    .. [4] Hamzekhani, S., Maniavi Falahieh, M., Kamalizadeh, M. R. and
+       Salmaninejad, M. "Bubble Dynamics for Nucleate Pool Boiling of Water,
+       Ethanol and Methanol Pure Liquids under the Atmospheric Pressure."
+       Journal of Applied Fluid Mechanics 8, no. 4 (2015): 893-898.
+    .. [5] Oliveira, A. V. S., Alegre, G. H. M. and dos Santos, R. G.
+       "Accuracy of Boiling Correlations on Nucleate Boiling with Ethanol Using
+       a Thin Platinum Wire at Different Pressures." Proceedings of ENCIT
+       2016, Vitória, Brazil, 2016.
     """
     if Te is None and q is None:
         raise ValueError("Either q or Te is needed for this correlation")
 
-    if correlation == "water":
-        angle = 45.0
-    elif correlation == "cryogenic":
-        angle = 1.0
-    elif True:
-        angle = 35.0
+    if angle is None:
+        if correlation == "water":
+            angle = 45.0
+        elif correlation == "cryogenic":
+            angle = 1.0
+        else:
+            angle = 35.0
 
     db = 0.0146*angle*(2*sigma/g/(rhol-rhog))**0.5
     diffusivity_L = kl/rhol/Cpl
@@ -499,7 +510,7 @@ def Stephan_Abdelsalam(rhol: float, rhog: float, mul: float, kl: float, Cpl: flo
     elif q is not None:
         X1 = db/kl/Tsat*q
     X2 = diffusivity_L**2*rhol/sigma/db
-    X3 = Hvap*db**2/diffusivity_L**2
+    X3 = Cpl*Tsat*db**2/diffusivity_L**2
     X4 = Hvap*db**2/diffusivity_L**2
     X5 = rhog/rhol
     X6 = Cpl*mul/kl
@@ -508,9 +519,9 @@ def Stephan_Abdelsalam(rhol: float, rhog: float, mul: float, kl: float, Cpl: flo
 
     if correlation == "general":
         if Te is not None:
-            h = (0.23*X1**0.674*X2**0.35*X3**0.371*X5**0.297*X8**-1.73*kl/db)**(1/0.326)
+            h = (0.23*X1**0.674*X2**0.35*X4**0.371*X5**0.297*X8**-1.73*kl/db)**(1/0.326)
         else:
-            h = (0.23*X1**0.674*X2**0.35*X3**0.371*X5**0.297*X8**-1.73*kl/db)
+            h = (0.23*X1**0.674*X2**0.35*X4**0.371*X5**0.297*X8**-1.73*kl/db)
     elif correlation == "water":
         if Te is not None:
             h = (0.246E7*X1**0.673*X4**-1.58*X3**1.26*X8**5.22*kl/db)**(1/0.327)
@@ -735,6 +746,7 @@ def Cooper(P: float, Pc: float, MW: float, Te: float | None=None, q: float | Non
         raise ValueError("Either q or Te is needed for this correlation")
 
 
+# Old (1993) values, kept as a fallback for fluids not in h0_VDI_2e
 h0_Gorenflow_1993 = {"74-82-8": 7000.0, "74-84-0": 4500.0, "74-98-6": 4000.0,
 "106-97-8": 3600.0, "109-66-0": 3400.0, "78-78-4": 2500.0, "110-54-3": 3300.0,
 "142-82-5": 3200.0, "71-43-2": 2900.0, "108-88-3": 2800.0, "92-52-4": 2100.0,
@@ -877,6 +889,13 @@ def Gorenflo(P: float, Pc: float, dPdT: float | None=None,
     flagged in Table H2.1 as based on very few experimental data
     (footnote d) or on data with very high scatter (footnote e).
 
+    When `Te` is given instead of `q`, solving for `h` gives
+    :math:`h = [h_0 F(p^*) F_W (T_e/q_0)^n]^{1/(1-n)}`, so errors in
+    :math:`h_0`, :math:`F(p^*)` and :math:`F_W` are raised to the power
+    :math:`1/(1-n)` (about 4 for water at 1 atm, and 6 to 9 for other fluids
+    at :math:`p^*` from 0.03 down to 0.005). A `UserWarning` stating this amplification is issued on
+    every call with `Te`; specify `q` where possible.
+
     Examples
     --------
     R134a boiling at 10 bar with a heat flux of 20 kW/m², copper wall:
@@ -948,11 +967,17 @@ def Gorenflo(P: float, Pc: float, dPdT: float | None=None,
         if _casrn_used is None:
             raise ValueError("Fluid name '{}' not found in Gorenflo tables. "
                 "See gorenflo_fluid_aliases for valid names, or pass CASRN directly.".format(fluid))
-    # Unlisted fluid: estimate h0 with Eq. (8), P_f evaluated at p* = 0.1.
-    # P_f in (kPa/K)/(mN/m): dPdT [Pa/K]/1E3 and sigma [N/m]*1E3 -> dPdT/(sigma*1E6)
-    if (h0 is None and dPdT is not None and sigma is not None
-            and (_casrn_used is None or _casrn_used == "reference")):
-        h0 = 3580.0*(dPdT/(sigma*1.0E6))**0.6
+    # A fluid not in the tables (or the reference fluid) with dPdT and sigma
+    # given gets h0 from Eq. (8) instead of the table lookup.
+    use_reference_fluid = (h0 is None and dPdT is not None and sigma is not None
+                           and (_casrn_used is None or _casrn_used == "reference"))
+    if use_reference_fluid:
+        # Eq. (8): h0 = 3580*F_f, F_f = (P_f/P_f0)^0.6, P_f evaluated at p* = 0.1.
+        # P_f0 = 1 (um K)^-1 = 1 (kPa/K)/(mN/m) = 1E6 (Pa/K)/(N/m)
+        P_f = dPdT/sigma
+        P_f0 = 1E6
+        F_f = (P_f/P_f0)**0.6
+        h0 = 3580.0*F_f
     if h0 is None: # NUMBA: DELETE
         if _casrn_used in _h0_VDI_2e_by_casrn:
             h0 = _h0_VDI_2e_by_casrn[_casrn_used]
@@ -983,13 +1008,16 @@ def Gorenflo(P: float, Pc: float, dPdT: float | None=None,
         # Helium h0 is given at q0 = 1 kW/m^2 (Table H2.1, footnote i)
         q0 = 1E3
     # Wall correction: surface roughness x wall-material effusivity
-    F_w = (Ra/Ra0)**(2.0/15.0)*(eff/eff_Cu)**0.5
+    F_wr = (Ra/Ra0)**(2.0/15.0)
+    F_wm = (eff/eff_Cu)**0.5
+    F_w = F_wr*F_wm
     if q is not None:
         h = h0*F_w*Fp*(q/q0)**n
     elif Te is not None:
         # h = h0*F_w*Fp*(q/q0)^n with q = h*Te  ->  h^(1-n) = h0*F_w*Fp*(Te/q0)^n
         A = h0*F_w*Fp*(Te/q0)**n
         h = A**(1./(1. - n))
+        _gorenflo_Te_warning(n) # NUMBA: DELETE
     else:
         raise ValueError("Either q or Te is needed for this correlation")
     if return_CASRN:
@@ -1076,6 +1104,18 @@ def _gorenflo_data_warning(casrn):
                   "expect larger uncertainty.".format(
                       gorenflo_casrn_to_name.get(casrn, casrn), casrn, reason),
                   UserWarning, stacklevel=3)
+
+
+def _gorenflo_Te_warning(n):
+    # Solving for h with Te given raises every input factor to the power
+    # 1/(1-n), so any error in h0, F_w or F(p*) is amplified.
+    amplification = 1./(1. - n)
+    warnings.warn(
+        "Gorenflo with specified Te: h scales with h0*F_w*F(p*) raised to "
+        "1/(1-n) = {:.1f}, so a 10% error in h0, F_w or F(p*) gives about a "
+        "{:.0f}% error in h (and in q = h*Te). Specify q instead of Te where "
+        "possible.".format(amplification, 100*(1.1**amplification - 1)),
+        UserWarning, stacklevel=3)
 
 
 # ---------------------------------------------------------------------------
@@ -1318,7 +1358,7 @@ def h_nucleic_methods(Te: float | None=None, Tsat: float | None=None, P: float |
 def h_nucleic(Te: float | None=None, q: float | None=None, Tsat: float | None=None, P: float | None=None, dPsat: float | None=None, dPdT: float | None=None,
               Cpl: float | None=None, kl: float | None=None, mul: float | None=None, rhol: float | None=None, sigma: float | None=None, Hvap: float | None=None,
               rhog: float | None=None, MW: float | None=None, Pc: float | None=None, Csf: float=0.013, n: float=1.7, kw: float=401.0, rhow: float=8.96,
-              Cpw: float=384.0, angle: float=35.0, Rp: float=1e-6, Ra: float=0.4e-6, h0: float | None=None,
+              Cpw: float=384.0, angle: float | None=None, Rp: float=1e-6, Ra: float=0.4e-6, h0: float | None=None,
               CAS: str | None=None, Method: str | None=None) -> float:
     r"""This function handles the calculation of nucleate boiling
     heat flux and chooses the best method for performing the calculation
@@ -1367,7 +1407,8 @@ def h_nucleic(Te: float | None=None, q: float | None=None, Tsat: float | None=No
     Cpw : float, optional
         Heat capacity of wall (only for cryogenics) [J/kg/K]
     angle : float, optional
-        Contact angle of bubble with wall [degrees]
+        Contact angle of bubble with wall for the Stephan-Abdelsalam methods;
+        chosen from the fluid group when not given [degrees]
     Rp : float, optional
         Roughness parameter of the surface (1 micrometer default) used by
         `Cooper` method, [m]
